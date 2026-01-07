@@ -5,11 +5,16 @@ from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+import json
+import os
+
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCYn6UEtQ771a_OWSiNBoG8w"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
-SERVICE_ACCOUNT_FILE = r"C:\Users\Gurpreet\Downloads\gurbani-app-firebase-adminsdk.json"
+
+
+SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
 COLLECTION_NAME = "liveStreams"
 
 # --------------------------------------
@@ -21,8 +26,10 @@ NS = {
 
 # ---------------- FIREBASE INIT ----------------
 if not firebase_admin._apps:
-    cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
+    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
+    cred = credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(cred)
+
 
 db = firestore.client()
 
