@@ -96,7 +96,7 @@ from google.cloud.firestore_v1 import FieldFilter
 def update_firestore_live_stream(data):
     docs = (
         db.collection(COLLECTION_NAME)
-        .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID))
+        .where(filter=FieldFilter("gurbani_live", "==", CHANNEL_ID))
         .limit(1)
         .get()
     )
@@ -134,3 +134,4 @@ if __name__ == "__main__":
         print("🎯 Selected Video:")
         print(result)
         update_firestore_live_stream(result)
+
