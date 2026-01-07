@@ -2,14 +2,31 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# ---------------- CONFIG ----------------
 CHANNEL_ID = "UCYn6UEtQ771a_OWSiNBoG8w"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
+
+SERVICE_ACCOUNT_FILE = r"C:\Users\Gurpreet\Downloads\gurbani-app-firebase-adminsdk.json"
+COLLECTION_NAME = "liveStreams"
+
+# --------------------------------------
 
 NS = {
     "atom": "http://www.w3.org/2005/Atom",
     "yt": "http://www.youtube.com/xml/schemas/2015"
 }
 
+# ---------------- FIREBASE INIT ----------------
+if not firebase_admin._apps:
+    cred = credentials.Certificate(SERVICE_ACCOUNT_FILE)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+# ---------------- RSS FETCH + FILTER ----------------
 def fetch_latest_official_sgpc_live():
     response = requests.get(RSS_URL, timeout=15)
     response.raise_for_status()
@@ -22,13 +39,12 @@ def fetch_latest_official_sgpc_live():
         video_id_el = entry.find("yt:videoId", NS)
         published_el = entry.find("atom:published", NS)
 
-        # ✅ SAFE checks
         if title_el is None or video_id_el is None or published_el is None:
             continue
 
         title = title_el.text.strip()
 
-        # ✅ FILTER: ONLY Official SGPC LIVE streams
+        # Only Official SGPC LIVE streams
         if not title.startswith("Official SGPC LIVE"):
             continue
 
@@ -45,20 +61,19 @@ def fetch_latest_official_sgpc_live():
     if not matches:
         return None
 
-    # ✅ SORT BY TIME (LATEST FIRST)
+    # Sort latest first
     matches.sort(key=lambda x: x["published"], reverse=True)
 
-    # ✅ TAKE LATEST 2 ONLY
+    # Take latest 2
     latest_two = matches[:2]
 
-    # ✅ PREFER AUDIO IF PRESENT
+    # Prefer Audio if present
     selected = None
     for video in latest_two:
         if "LIVE (Audio)" in video["title"]:
             selected = video
             break
 
-    # ❌ If no Audio, take latest by time
     if selected is None:
         selected = latest_two[0]
 
@@ -68,11 +83,38 @@ def fetch_latest_official_sgpc_live():
         "url": f"https://www.youtube.com/watch?v={selected['video_id']}"
     }
 
+# ---------------- FIRESTORE UPDATE ----------------
+from google.cloud.firestore_v1 import FieldFilter
 
+def update_firestore_live_stream(data):
+    docs = (
+        db.collection(COLLECTION_NAME)
+        .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID))
+        .limit(1)
+        .get()
+    )
+
+    if not docs:
+        print("❌ No Firestore document found with this channel_Id")
+        return
+
+    doc_ref = docs[0].reference
+
+    doc_ref.update({
+        "imageUrl": data["imageUrl"],
+        "title": data["title"],
+        "url": data["url"]
+    })
+
+    print("✅ Firestore updated successfully")
+
+# ---------------- MAIN ----------------
 if __name__ == "__main__":
     result = fetch_latest_official_sgpc_live()
 
-    if result:
-        print(result)
-    else:
+    if not result:
         print("❌ No matching Official SGPC LIVE video found")
+    else:
+        print("🎯 Selected Video:")
+        print(result)
+        update_firestore_live_stream(result)
