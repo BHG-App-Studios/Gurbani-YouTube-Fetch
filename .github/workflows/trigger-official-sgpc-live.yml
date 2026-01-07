@@ -1,0 +1,30 @@
+name: Official SGPC LIVE Stream Fetch
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   
+  workflow_dispatch:       
+
+jobs:
+  update-live-stream:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests firebase-admin google-cloud-firestore
+
+      - name: 🚀 Run Official SGPC LIVE updater
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Official-SGPC-LIVE.py
