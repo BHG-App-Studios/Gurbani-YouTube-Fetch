@@ -62,12 +62,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           python Live-Rehras-Sahib.py
-
-      - name: 🕉️ Run Live Sukhmani Sahib Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          python Live-Sukhmani-Sahib.py
+          
 
       # ---------------- Historic Gurdwaras ----------------
 
