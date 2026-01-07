@@ -1,12 +1,12 @@
-name: Official SGPC LIVE Stream Fetch
+name: Trigger Python Scripts
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   
-  workflow_dispatch:       
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch:
 
 jobs:
-  update-live-stream:
+  update-live-streams:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,8 +23,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests firebase-admin google-cloud-firestore
 
-      - name: 🚀 Run Official SGPC LIVE updater
+      - name: 🚀 Run Official SGPC LIVE Stream Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           python Official-SGPC-LIVE.py
+
+      - name: 📖 Run Hukamnama Katha Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Hukamnama-Katha-Fetch.py
