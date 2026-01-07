@@ -99,8 +99,7 @@ def update_firestore_hukamnama(data):
     doc_ref.update({
         "imageUrl": data["imageUrl"],
         "title": data["title"],
-        "url": data["url"],
-        "updatedAt": firestore.SERVER_TIMESTAMP
+        "url": data["url"]
     })
 
     print("✅ Hukamnama Katha updated successfully")
