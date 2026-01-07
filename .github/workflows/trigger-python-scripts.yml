@@ -23,11 +23,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests firebase-admin google-cloud-firestore
 
+      # ---------------- SGPC & Hukamnama ----------------
+
       - name: 🚀 Run Official SGPC LIVE Stream Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           python Official-SGPC-LIVE.py
+
+      - name: 📖 Run Hukamnama Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Hukamnama-Fetch.py
 
       - name: 📖 Run Hukamnama Katha Fetch
         env:
@@ -35,8 +43,86 @@ jobs:
         run: |
           python Hukamnama-Katha-Fetch.py
 
-      - name: 📖 Run Hukamnama Fetch
+      - name: 📖 Run Fatehgarh Sahib Hukamnama Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          python Hukamnama-Fetch.py
+          python Fatehgarh-Sahib-Hukamnama-Fetch.py
+
+      # ---------------- Live Paath ----------------
+
+      - name: 🕉️ Run Live Japji Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Live-Japji-Sahib.py
+
+      - name: 🕉️ Run Live Rehras Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Live-Rehras-Sahib.py
+
+      - name: 🕉️ Run Live Sukhmani Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Live-Sukhmani-Sahib.py
+
+      # ---------------- Historic Gurdwaras ----------------
+
+      - name: 🛕 Run Bangla Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Bangla-Sahib-Fetch.py
+
+      - name: 🛕 Run Fatehgarh Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Fatehgarh-Sahib-Fetch.py
+
+      - name: 🛕 Run Takht Sri Kesgarh Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Takht-Sri-Kesgarh-Sahib-Fetch.py
+
+      - name: 🛕 Run Damdama Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Damdama-Sahib-Fetch.py
+
+      - name: 🛕 Run Dukh Niwaran Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Dukh-Niwaran-Sahib-Fetch.py
+
+      - name: 🛕 Run Dukh Niwaran Sahib Surrey Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Dukh-Niwaran-Sahib-Surrey-Fetch.py
+
+      - name: 🛕 Run Shaheed Ganj Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Shaheed-Ganj-Sahib-Fetch.py
+
+      - name: 🛕 Run Sis Ganj Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Sis-Ganj-Sahib-Fetch.py
+
+      # ---------------- Special Kirtan ----------------
+
+      - name: 🎵 Run Baba Deep Singh Kirtan Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python Baba-Deep-Singh-Kirtan-Fetch.py
