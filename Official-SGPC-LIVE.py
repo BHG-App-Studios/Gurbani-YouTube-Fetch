@@ -105,15 +105,25 @@ def update_firestore_live_stream(data):
         print("❌ No Firestore document found with this channel_Id")
         return
 
-    doc_ref = docs[0].reference
+    doc = docs[0]
+    doc_ref = doc.reference
+    existing = doc.to_dict()
 
+    # 🔒 CHANGE-DETECTION (KEY PART)
+    if existing.get("url") == data["url"]:
+        print("⏭ No change detected (same live video). Skipping update.")
+        return
+
+    # ✅ Update only if changed
     doc_ref.update({
         "imageUrl": data["imageUrl"],
         "title": data["title"],
-        "url": data["url"]
+        "url": data["url"],
+        "updatedAt": firestore.SERVER_TIMESTAMP
     })
 
-    print("✅ Firestore updated successfully")
+    print("✅ Firestore updated (new live stream detected)")
+
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
