@@ -118,8 +118,7 @@ def update_firestore_live_stream(data):
     doc_ref.update({
         "imageUrl": data["imageUrl"],
         "title": data["title"],
-        "url": data["url"],
-        "updatedAt": firestore.SERVER_TIMESTAMP
+        "url": data["url"]
     })
 
     print("✅ Firestore updated (new live stream detected)")
