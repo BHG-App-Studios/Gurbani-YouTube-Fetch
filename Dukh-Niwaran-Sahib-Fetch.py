@@ -11,8 +11,8 @@ from google.cloud.firestore_v1 import FieldFilter
 CHANNEL_ID = "UCPKPN4bzM8Ja-F_kIEZoAhA"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
-YOUTUBE_API_KEY = os.environ["YOUTUBE_API_KEY"]
 SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
+YOUTUBE_API_KEY = os.environ["YOUTUBE_API_KEY"]
 
 COLLECTION_NAME = "liveStreams"
 # --------------------------------------
@@ -29,44 +29,44 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# ---------------- GET CURRENT FIREBASE URL ----------------
-def get_current_firebase_url():
-    docs = (
-        db.collection(COLLECTION_NAME)
-        .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID))
-        .limit(1)
-        .get()
-    )
-    if not docs:
-        return None
-    return docs[0].to_dict().get("url")
-
-# ---------------- RSS FETCH (LATEST 5 VIDEOS) ----------------
-def fetch_latest_5_from_rss():
+# ---------------- RSS FETCH (LATEST 5 MATCHES) ----------------
+def fetch_latest_5_matching():
     response = requests.get(RSS_URL, timeout=15)
     response.raise_for_status()
 
     root = ET.fromstring(response.text)
-    videos = []
+    matches = []
 
     for entry in root.findall("atom:entry", NS):
+        title_el = entry.find("atom:title", NS)
         video_id_el = entry.find("yt:videoId", NS)
         published_el = entry.find("atom:published", NS)
 
-        if video_id_el is None or published_el is None:
+        if title_el is None or video_id_el is None or published_el is None:
+            continue
+
+        title = title_el.text.strip()
+
+        # ✅ FILTER: Gurdwara Dukh Niwaran Sahib ONLY (UNCHANGED)
+        if "Gurdwara Dukh Niwaran Sahib" not in title:
             continue
 
         published = datetime.fromisoformat(
             published_el.text.replace("Z", "+00:00")
         ).astimezone(timezone.utc)
 
-        videos.append({
+        matches.append({
             "video_id": video_id_el.text.strip(),
+            "title": title,
             "published": published
         })
 
-    videos.sort(key=lambda x: x["published"], reverse=True)
-    return videos[:5]
+    if not matches:
+        return []
+
+    # ✅ SORT BY TIME & TAKE LATEST 5
+    matches.sort(key=lambda x: x["published"], reverse=True)
+    return matches[:5]
 
 # ---------------- YOUTUBE API (SINGLE CALL) ----------------
 def fetch_video_details(video_ids):
@@ -80,31 +80,35 @@ def fetch_video_details(video_ids):
 
     r = requests.get(url, params=params, timeout=20)
     r.raise_for_status()
-    return r.json()["items"]
+    return r.json().get("items", [])
 
 # ---------------- SELECT FINAL VIDEO ----------------
-def select_best_video(videos):
-    live_video = None
-    latest_video = None
+def select_best_video(rss_videos, yt_videos):
+    yt_map = {v["id"]: v for v in yt_videos}
+
+    live_candidate = None
+    latest_candidate = None
     latest_time = None
 
-    for v in videos:
-        snippet = v["snippet"]
+    for v in rss_videos:
+        yt = yt_map.get(v["video_id"])
+        if not yt:
+            continue
+
+        snippet = yt["snippet"]
         live_status = snippet.get("liveBroadcastContent")
 
-        published = datetime.fromisoformat(
-            snippet["publishedAt"].replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
-
-        if latest_time is None or published > latest_time:
-            latest_time = published
-            latest_video = v
+        if latest_time is None or v["published"] > latest_time:
+            latest_time = v["published"]
+            latest_candidate = yt
 
         if live_status == "live":
-            live_video = v
+            live_candidate = yt
             break
 
-    final = live_video if live_video else latest_video
+    final = live_candidate if live_candidate else latest_candidate
+    if not final:
+        return None
 
     return {
         "title": final["snippet"]["title"],
@@ -122,32 +126,33 @@ def update_firestore(data):
     )
 
     if not docs:
-        print("❌ No Firestore document found for channel")
+        print("❌ No Firestore document found with channel id matching")
         return
 
     doc = docs[0]
     existing = doc.to_dict()
 
+    # 🔒 CHANGE-DETECTION (UNCHANGED)
     if existing.get("url") == data["url"]:
-        print("⏭ No change detected. Skipping update.")
+        print("⏭ No change detected (same Gurdwara Dukh Niwaran Sahib). Skipping update.")
         return
 
     doc.reference.update({
+        "imageUrl": data["imageUrl"],
         "title": data["title"],
-        "url": data["url"],
-        "imageUrl": data["imageUrl"]
+        "url": data["url"]
     })
 
-    print("✅ Firebase updated successfully")
+    print("✅ Gurdwara Dukh Niwaran Sahib updated successfully")
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
 
-    print("🔄 Fetching latest 5 videos from RSS...")
-    rss_videos = fetch_latest_5_from_rss()
+    print("🔄 Fetching latest Gurdwara Dukh Niwaran Sahib videos from RSS...")
+    rss_videos = fetch_latest_5_matching()
 
     if not rss_videos:
-        print("❌ No videos found in RSS")
+        print("❌ No Gurdwara Dukh Niwaran Sahib video found")
         exit(0)
 
     video_ids = [v["video_id"] for v in rss_videos]
@@ -155,9 +160,13 @@ if __name__ == "__main__":
     print("📡 Fetching video details from YouTube API (single call)...")
     yt_videos = fetch_video_details(video_ids)
 
-    final_video = select_best_video(yt_videos)
+    final_video = select_best_video(rss_videos, yt_videos)
 
-    print("🎯 Selected Video:")
+    if not final_video:
+        print("❌ No valid video selected")
+        exit(0)
+
+    print("🎯 Selected Gurdwara Dukh Niwaran Sahib:")
     print(final_video)
 
     update_firestore(final_video)
