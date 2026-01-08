@@ -122,9 +122,24 @@ jobs:
         run: |
           python Baba-Deep-Singh-Kirtan-Fetch.py
 
-      # ---------------- All Videos fetch ----------------
+       # ---------------- Path fetch ----------------
 
-           # ---------------- All Videos fetch ----------------
+      - name: 🎵 Run Rehras Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          python Rehras-Sahib-Fetch.py
+
+
+      - name: 🎵 Run Japji Sahib Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          python Japji-Sahib-Fetch.py
+
+      # ---------------- All Videos fetch ----------------
 
       - name: 🎵 Run Offline Youtube Videos Fetch
         env:
@@ -132,4 +147,7 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           python All-Videos-Fetch.py
+
+
+     
 
