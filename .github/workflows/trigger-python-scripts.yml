@@ -25,12 +25,12 @@ jobs:
 
       # ---------------- SGPC & Hukamnama ----------------
 
-      - name: 🚀 Run Official SGPC LIVE Stream Fetch
+      - name: 🚀 Run SGPC LIVE HARMANDIR SAHIB Stream Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
-          python Official-SGPC-LIVE.py
+          python Harmandir-Sahib-Fetch.py
 
       - name: 📖 Run Hukamnama Fetch
         env:
