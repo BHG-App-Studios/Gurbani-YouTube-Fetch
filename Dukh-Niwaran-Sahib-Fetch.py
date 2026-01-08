@@ -5,6 +5,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 import os
+from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCPKPN4bzM8Ja-F_kIEZoAhA"
@@ -26,6 +27,38 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
+
+# ---------------- LIVE CHECK (HTML, NO API) ----------------
+def is_video_live(video_url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        r = requests.get(video_url, headers=headers, timeout=15)
+
+        if r.status_code != 200:
+            return False
+
+        return '"isLiveNow":true' in r.text
+
+    except Exception as e:
+        print("⚠ Live check failed:", e)
+        return False
+
+# ---------------- GET CURRENT FIREBASE URL ----------------
+def get_current_firebase_url():
+    docs = (
+        db.collection(COLLECTION_NAME)
+        .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID))
+        .limit(1)
+        .get()
+    )
+
+    if not docs:
+        return None
+
+    return docs[0].to_dict().get("url")
 
 # ---------------- RSS FETCH (LATEST VIDEO ONLY) ----------------
 def fetch_latest_video():
@@ -66,8 +99,6 @@ def fetch_latest_video():
     }
 
 # ---------------- FIRESTORE UPDATE ----------------
-from google.cloud.firestore_v1 import FieldFilter
-
 def update_firestore(data):
     docs = (
         db.collection(COLLECTION_NAME)
@@ -95,10 +126,23 @@ def update_firestore(data):
         "url": data["url"]
     })
 
-    print("✅ Dukh Niwaran Sahib Ludhiana Sahib video updated successfully")
+    print("✅ Dukh Niwaran Sahib Ludhiana video updated successfully")
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
+
+    # 🔎 STEP 1: Check current Firebase URL first
+    current_url = get_current_firebase_url()
+
+    if current_url:
+        print("🔍 Checking current Firebase URL live status...")
+        if is_video_live(current_url):
+            print("🔴 Stream is currently LIVE. Exiting without changes.")
+            exit(0)
+        else:
+            print("⏹ Existing stream is NOT live. Continuing...")
+
+    # 🔄 STEP 2: Existing logic (UNCHANGED)
     result = fetch_latest_video()
 
     if not result:
