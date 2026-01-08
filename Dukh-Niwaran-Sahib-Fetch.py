@@ -29,6 +29,9 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ---------------- LIVE CHECK (HTML, NO API) ----------------
+import re
+import requests
+
 def is_video_live(video_url):
     try:
         print("🔗 Checking URL:", video_url)
@@ -45,22 +48,27 @@ def is_video_live(video_url):
         r = requests.get(video_url, headers=headers, timeout=20)
 
         print("🌐 HTTP status:", r.status_code)
-        print("📦 Response size (chars):", len(r.text))
+        print("📦 Response size:", len(r.text))
 
         if r.status_code != 200:
             return False
 
         html = r.text
 
-        # 💾 SAVE RAW RESPONSE FOR DEBUGGING (TXT)
-        with open("youtube_response_1Zt28cJsDlg.txt", "w", encoding="utf-8") as f:
-            f.write(html)
+        # ✅ FINAL & MOST RELIABLE LIVE SIGNALS
+        live_patterns = [
+            r'"isLive"\s*:\s*true',        
+            r'"isLiveNow"\s*:\s*true',
+            r'"status"\s*:\s*"LIVE"',
+            r'watching now'
+        ]
 
-        print("💾 Saved youtube_response_1Zt28cJsDlg.txt")
+        for pattern in live_patterns:
+            if re.search(pattern, html, re.IGNORECASE):
+                print("🔴 LIVE MATCHED:", pattern)
+                return True
 
-        print("🔎 Contains 'isLiveNow'?", "isLiveNow" in html)
-        print("🔎 Contains 'liveBroadcastDetails'?", "liveBroadcastDetails" in html)
-
+        print("⏹ No live signals detected")
         return False
 
     except Exception as e:
