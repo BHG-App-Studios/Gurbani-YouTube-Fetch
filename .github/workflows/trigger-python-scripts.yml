@@ -122,3 +122,11 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           python Baba-Deep-Singh-Kirtan-Fetch.py
+
+      # ---------------- All Videos fetch ----------------
+
+      - name: 🎵 Run Offline Youtube Videos Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python All-Videos-Fetch.py
