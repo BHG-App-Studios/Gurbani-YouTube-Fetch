@@ -8,7 +8,7 @@ import os
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UCA1Jqo-WXVuMgs4WcD5f5Yn"
+CHANNEL_ID = "UCA1Jqo-WXVuMgs4WcD5f5Yw"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
 SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
