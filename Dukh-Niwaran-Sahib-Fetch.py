@@ -29,22 +29,44 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ---------------- LIVE CHECK (HTML, NO API) ----------------
+import re
+
 def is_video_live(video_url):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
             "Accept-Language": "en-US,en;q=0.9",
         }
-        r = requests.get(video_url, headers=headers, timeout=15)
+
+        r = requests.get(video_url, headers=headers, timeout=20)
 
         if r.status_code != 200:
+            print("⚠ HTTP status:", r.status_code)
             return False
 
-        return '"isLiveNow":true' in r.text
+        html = r.text
+
+        # ✅ MOST RELIABLE SIGNAL
+        if re.search(r'"isLiveNow"\s*:\s*true', html):
+            return True
+
+        # 🟡 Fallback signals
+        if '"status":"LIVE"' in html:
+            return True
+
+        if '"liveBroadcastDetails"' in html:
+            return True
+
+        return False
 
     except Exception as e:
         print("⚠ Live check failed:", e)
         return False
+
 
 # ---------------- GET CURRENT FIREBASE URL ----------------
 def get_current_firebase_url():
