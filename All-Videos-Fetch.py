@@ -12,10 +12,10 @@ import re
 
 # ---------------- CONFIG ----------------
 CHANNEL_IDS = [
-    "UC_4INt1L8YGQAcQzjuE9PQw",
+    "UCDUkR1H7ORAcCwjNtBLFOvg",
 ]
 
-COLLECTION_NAME = "Listen_Kirtans_Videos"
+COLLECTION_NAME = "Listen_Kirtans_Vide"
 ALL_IDS_DOC = "-All_Videos_Id"
 MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes
 
