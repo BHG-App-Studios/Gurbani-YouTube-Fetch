@@ -105,7 +105,7 @@ for channel_id in CHANNEL_IDS:
             "title": v["title"],
             "url": v["url"],
             "imageUrl": v["imageUrl"],
-            "timestamp": firestore.Timestamp.from_datetime(v["published"]),
+            "timestamp": v["published"],
         })
 
         existing_ids.add(v["video_id"])
