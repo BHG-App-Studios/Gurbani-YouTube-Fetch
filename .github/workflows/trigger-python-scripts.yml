@@ -111,8 +111,12 @@ jobs:
 
       # ---------------- All Videos fetch ----------------
 
+           # ---------------- All Videos fetch ----------------
+
       - name: 🎵 Run Offline Youtube Videos Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           python All-Videos-Fetch.py
+
