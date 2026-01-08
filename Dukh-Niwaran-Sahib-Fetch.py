@@ -55,6 +55,13 @@ def is_video_live(video_url):
 
         html = r.text
 
+        # 💾 SAVE RAW RESPONSE FOR DEBUGGING
+        with open("youtube_response_1Zt28cJsDlg.html", "w", encoding="utf-8") as f:
+        f.write(html)
+
+        print("💾 Saved youtube_response_1Zt28cJsDlg.html")
+
+
         # 🔍 DEBUG: check if ANY live keywords exist
         print("🔎 Contains 'isLiveNow'?", "isLiveNow" in html)
         print("🔎 Contains 'liveBroadcastDetails'?", "liveBroadcastDetails" in html)
