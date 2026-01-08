@@ -1,4 +1,4 @@
-import requests   # ✅ REQUIRED (THIS WAS THE BUG)
+import requests   
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 import firebase_admin
@@ -14,7 +14,7 @@ CHANNEL_IDS = [
 ]
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
-ALL_IDS_DOC = "-All_Videos_Id"   # ✅ CONFIRMED FROM SCREENSHOT
+ALL_IDS_DOC = "-All_Videos_Id"  
 
 SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
 
