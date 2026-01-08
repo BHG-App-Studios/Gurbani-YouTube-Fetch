@@ -12,9 +12,7 @@ import re
 
 # ---------------- CONFIG ----------------
 CHANNEL_IDS = [
-    "UC884UDwNldmpdEiS1mgtijA",
-    "UC_JnnWTC6gHc59JwfMPTjdw",
-    "UCQroafhIKCxeQ0e9jj-O51Q",
+    "UC_4INt1L8YGQAcQzjuE9PQw",
 ]
 
 COLLECTION_NAME = "Listen_Kirtans_Videos"
