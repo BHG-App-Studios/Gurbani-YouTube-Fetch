@@ -11,7 +11,9 @@ from google.cloud.firestore_v1 import FieldFilter
 CHANNEL_ID = "UCPKPN4bzM8Ja-F_kIEZoAhA"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
+YOUTUBE_API_KEY = os.environ["YOUTUBE_API_KEY"]
 SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
+
 COLLECTION_NAME = "liveStreams"
 # --------------------------------------
 
@@ -28,71 +30,8 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# ---------------- LIVE CHECK (HTML, NO API) ----------------
-import re
-import requests
-
-def is_video_live(video_url):
-    try:
-        print("🔗 Checking URL:", video_url)
-
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-
-        r = requests.get(video_url, headers=headers, timeout=20)
-
-        print("🌐 HTTP status:", r.status_code)
-        print("📦 Response size:", len(r.text))
-
-        if r.status_code != 200:
-            return False
-
-        html = r.text
-
-        # ✅ FINAL & MOST RELIABLE LIVE SIGNALS
-        live_patterns = [
-            r'"isLive"\s*:\s*true',        
-            r'"isLiveNow"\s*:\s*true',
-            r'"status"\s*:\s*"LIVE"',
-            r'watching now'
-        ]
-
-        for pattern in live_patterns:
-            if re.search(pattern, html, re.IGNORECASE):
-                print("🔴 LIVE MATCHED:", pattern)
-                return True
-
-        print("⏹ No live signals detected")
-        return False
-
-    except Exception as e:
-        print("⚠ Live check exception:", e)
-        return False
-
-
-
-# ---------------- GET CURRENT FIREBASE URL ----------------
-def get_current_firebase_url():
-    docs = (
-        db.collection(COLLECTION_NAME)
-        .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID))
-        .limit(1)
-        .get()
-    )
-
-    if not docs:
-        return None
-
-    return docs[0].to_dict().get("url")
-
-# ---------------- RSS FETCH (LATEST VIDEO ONLY) ----------------
-def fetch_latest_video():
+# ---------------- RSS FETCH (LATEST 5 VIDEOS) ----------------
+def fetch_latest_5_videos():
     response = requests.get(RSS_URL, timeout=15)
     response.raise_for_status()
 
@@ -104,7 +43,7 @@ def fetch_latest_video():
         video_id_el = entry.find("yt:videoId", NS)
         published_el = entry.find("atom:published", NS)
 
-        if title_el is None or video_id_el is None or published_el is None:
+        if not title_el or not video_id_el or not published_el:
             continue
 
         published = datetime.fromisoformat(
@@ -117,16 +56,43 @@ def fetch_latest_video():
             "published": published
         })
 
-    if not videos:
-        return None
+    # Sort newest first and take top 5
+    videos.sort(key=lambda x: x["published"], reverse=True)
+    return videos[:5]
 
-    # ✅ LATEST VIDEO BY TIME
-    latest = max(videos, key=lambda x: x["published"])
+# ---------------- YOUTUBE OFFICIAL API (1 CALL) ----------------
+def fetch_video_details(video_ids):
+    ids = ",".join(video_ids)
+
+    url = "https://www.googleapis.com/youtube/v3/videos"
+    params = {
+        "part": "snippet,liveStreamingDetails",
+        "id": ids,
+        "key": YOUTUBE_API_KEY
+    }
+
+    r = requests.get(url, params=params, timeout=20)
+    r.raise_for_status()
+    return r.json().get("items", [])
+
+# ---------------- SELECT FINAL VIDEO ----------------
+def select_best_video(videos, api_items):
+    live_video = None
+    latest_video = max(videos, key=lambda x: x["published"])
+
+    for item in api_items:
+        if item["snippet"].get("liveBroadcastContent") == "live":
+            live_video = item
+            break
+
+    selected = live_video if live_video else next(
+        v for v in api_items if v["id"] == latest_video["video_id"]
+    )
 
     return {
-        "imageUrl": f"https://i.ytimg.com/vi/{latest['video_id']}/hqdefault.jpg",
-        "title": latest["title"],
-        "url": f"https://www.youtube.com/watch?v={latest['video_id']}"
+        "imageUrl": f"https://i.ytimg.com/vi/{selected['id']}/hqdefault.jpg",
+        "title": selected["snippet"]["title"],
+        "url": f"https://www.youtube.com/watch?v={selected['id']}"
     }
 
 # ---------------- FIRESTORE UPDATE ----------------
@@ -139,16 +105,14 @@ def update_firestore(data):
     )
 
     if not docs:
-        print("❌ No Firestore document found with this channel_Id")
+        print("❌ No Firestore document found")
         return
 
-    doc = docs[0]
-    doc_ref = doc.reference
-    existing = doc.to_dict()
+    doc_ref = docs[0].reference
+    existing = docs[0].to_dict()
 
-    # 🔒 CHANGE-DETECTION
     if existing.get("url") == data["url"]:
-        print("⏭ No change detected (same latest video). Skipping update.")
+        print("⏭ No change detected. Skipping update.")
         return
 
     doc_ref.update({
@@ -157,30 +121,28 @@ def update_firestore(data):
         "url": data["url"]
     })
 
-    print("✅ Dukh Niwaran Sahib Ludhiana video updated successfully")
+    print("✅ Firebase updated successfully")
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
 
-    # 🔎 STEP 1: Check current Firebase URL first
-    current_url = get_current_firebase_url()
-    print("📄 Firebase current_url =", current_url)
+    latest_videos = fetch_latest_5_videos()
 
+    if not latest_videos:
+        print("❌ No videos found in RSS")
+        exit(0)
 
-    if current_url:
-        print("🔍 Checking current Firebase URL live status...")
-        if is_video_live(current_url):
-            print("🔴 Stream is currently LIVE. Exiting without changes.")
-            exit(0)
-        else:
-            print("⏹ Existing stream is NOT live. Continuing...")
+    video_ids = [v["video_id"] for v in latest_videos]
 
-    # 🔄 STEP 2: Existing logic (UNCHANGED)
-    result = fetch_latest_video()
+    api_items = fetch_video_details(video_ids)
 
-    if not result:
-        print("❌ No video found in RSS feed")
-    else:
-        print("🎯 Selected Latest Video:")
-        print(result)
-        update_firestore(result)
+    if not api_items:
+        print("❌ YouTube API returned no data")
+        exit(0)
+
+    final_video = select_best_video(latest_videos, api_items)
+
+    print("🎯 FINAL SELECTED VIDEO")
+    print(final_video)
+
+    update_firestore(final_video)
