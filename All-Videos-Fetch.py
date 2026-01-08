@@ -105,7 +105,7 @@ for channel_id in CHANNEL_IDS:
             "title": v["title"],
             "url": v["url"],
             "imageUrl": v["imageUrl"],
-            "timestamp": v["published"],
+            "timestamp": str(int(v["published"].timestamp() * 1000)),
         })
 
         existing_ids.add(v["video_id"])
