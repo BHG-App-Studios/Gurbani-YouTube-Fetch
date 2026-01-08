@@ -1,4 +1,4 @@
-import requests
+import requests   # ✅ REQUIRED (THIS WAS THE BUG)
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 import firebase_admin
@@ -14,7 +14,7 @@ CHANNEL_IDS = [
 ]
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
-ALL_IDS_DOC = "-All_Videos_Id"
+ALL_IDS_DOC = "-All_Videos_Id"   # ✅ CONFIRMED FROM SCREENSHOT
 
 SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
 
@@ -30,7 +30,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# ---------------- READ EXISTING VIDEO IDS (1 READ) ----------------
+# ---------------- READ EXISTING IDS (1 READ ONLY) ----------------
 ids_doc_ref = db.collection(COLLECTION_NAME).document(ALL_IDS_DOC)
 ids_doc = ids_doc_ref.get()
 
@@ -47,7 +47,7 @@ total_skipped = 0
 total_inserted = 0
 new_ids_added = []
 
-# ---------------- FETCH & PARSE RSS ----------------
+# ---------------- FETCH RSS ----------------
 def fetch_videos_from_channel(channel_id):
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     res = requests.get(url, timeout=20)
@@ -68,22 +68,24 @@ def fetch_videos_from_channel(channel_id):
             published.text.replace("Z", "+00:00")
         ).astimezone(timezone.utc)
 
+        video_id = vid.text.strip()
+
         videos.append({
-            "video_id": vid.text.strip(),
+            "video_id": video_id,
             "title": title.text.strip(),
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
             "published": published_dt,
-            "url": f"https://www.youtube.com/watch?v={vid.text.strip()}",
-            "imageUrl": f"https://i.ytimg.com/vi/{vid.text.strip()}/hqdefault.jpg",
         })
 
     return videos
 
-# ---------------- MAIN PROCESS ----------------
+# ---------------- MAIN ----------------
 for channel_id in CHANNEL_IDS:
     print(f"\n🔍 Fetching channel: {channel_id}")
 
     videos = fetch_videos_from_channel(channel_id)
-    print(f"📺 Videos found in RSS: {len(videos)}")
+    print(f"📺 Videos in RSS: {len(videos)}")
 
     total_fetched += len(videos)
 
@@ -92,7 +94,7 @@ for channel_id in CHANNEL_IDS:
             total_skipped += 1
             continue
 
-        # ✅ INSERT NEW VIDEO
+        # ➕ INSERT NEW VIDEO DOC (AUTO ID)
         db.collection(COLLECTION_NAME).document().set({
             "title": v["title"],
             "url": v["url"],
@@ -113,10 +115,10 @@ if new_ids_added:
         "total_count": len(existing_ids)
     }, merge=True)
 
-# ---------------- FINAL SUMMARY ----------------
+# ---------------- SUMMARY ----------------
 print("\n================ SUMMARY ================")
-print(f"📥 Total videos fetched : {total_fetched}")
-print(f"⏭️  Videos skipped      : {total_skipped}")
-print(f"➕ Videos inserted      : {total_inserted}")
-print(f"📊 New total in Firebase: {len(existing_ids)}")
+print(f"📥 Total fetched  : {total_fetched}")
+print(f"⏭️  Skipped        : {total_skipped}")
+print(f"➕ Inserted       : {total_inserted}")
+print(f"📊 Firebase total : {len(existing_ids)}")
 print("========================================")
