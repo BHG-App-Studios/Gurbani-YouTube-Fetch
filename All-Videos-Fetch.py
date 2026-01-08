@@ -61,22 +61,27 @@ print(f"📦 Existing video IDs in Firebase: {len(existing_ids)}")
 
 # ---------------- COUNTERS ----------------
 total_fetched = 0
-total_skipped = 0
+total_skipped_existing = 0
+total_skipped_live = 0
+total_skipped_short = 0
 total_inserted = 0
 new_ids_added = []
 
 # ---------------- RSS FETCH ----------------
 def fetch_videos_from_channel(channel_id):
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-    response = requests.get(url, timeout=20)
-    response.raise_for_status()
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"⚠️ Error fetching channel {channel_id}: {e}")
+        return []
 
     root = ET.fromstring(response.text)
     videos = []
 
     entries = root.findall("atom:entry", NS)
-    print(f"🔎 Entries found: {len(entries)}")
-
+    
     for entry in entries:
         title_el = entry.find("atom:title", NS)
         video_id_el = entry.find("yt:videoId", NS)
@@ -101,7 +106,55 @@ def fetch_videos_from_channel(channel_id):
 
     return videos
 
-# ---------------- DURATION HELPERS ----------------
+# ---------------- HELPER: CHUNK LIST ----------------
+def chunk_list(data, chunk_size):
+    """Yield successive chunks from list."""
+    for i in range(0, len(data), chunk_size):
+        yield data[i:i + chunk_size]
+
+# ---------------- API HELPER: CHECK LIVE STATUS ----------------
+def get_live_status_batch(video_ids):
+    """
+    Checks 'snippet.liveBroadcastContent'.
+    Returns a set of video_ids that ARE live or upcoming (to be excluded).
+    """
+    live_or_upcoming_ids = set()
+    
+    # Process in chunks of 50 (YouTube API limit is 50)
+    # You requested 30, but 50 is safe. We can use 30 to be extra safe.
+    CHUNK_SIZE = 30 
+    
+    for chunk in chunk_list(video_ids, CHUNK_SIZE):
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "snippet",
+            "id": ",".join(chunk),
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 50
+        }
+        
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            
+            for item in data.get("items", []):
+                vid = item["id"]
+                # 'none' = completed/vod (keep)
+                # 'live' = currently live (exclude)
+                # 'upcoming' = scheduled (exclude)
+                broadcast_content = item["snippet"].get("liveBroadcastContent", "none")
+                
+                if broadcast_content in ["live", "upcoming"]:
+                    live_or_upcoming_ids.add(vid)
+                    print(f"🚫 Detected Live/Upcoming stream: {vid} ({broadcast_content})")
+                    
+        except Exception as e:
+            print(f"⚠️ Error checking live status: {e}")
+    
+    return live_or_upcoming_ids
+
+# ---------------- API HELPER: FETCH DURATIONS ----------------
 def iso8601_to_seconds(duration):
     match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
     if not match:
@@ -111,65 +164,95 @@ def iso8601_to_seconds(duration):
     s = int(match.group(3) or 0)
     return h * 3600 + m * 60 + s
 
-
 def fetch_durations_batch(video_ids):
     """
-    Fetch durations for up to 50 videos in ONE API call (1 unit)
+    Fetch durations for videos in chunks.
     """
-    if not video_ids:
-        return {}
-
-    url = "https://www.googleapis.com/youtube/v3/videos"
-    params = {
-        "part": "contentDetails",
-        "id": ",".join(video_ids),
-        "key": YOUTUBE_API_KEY,
-        "maxResults": 50
-    }
-
-    r = requests.get(url, params=params, timeout=15)
-    r.raise_for_status()
-    data = r.json()
-
     duration_map = {}
-    for item in data.get("items", []):
-        vid = item["id"]
-        iso = item["contentDetails"]["duration"]
-        duration_map[vid] = iso8601_to_seconds(iso)
+    CHUNK_SIZE = 50 
+
+    for chunk in chunk_list(video_ids, CHUNK_SIZE):
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "contentDetails",
+            "id": ",".join(chunk),
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 50
+        }
+
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+
+            for item in data.get("items", []):
+                vid = item["id"]
+                iso = item["contentDetails"]["duration"]
+                duration_map[vid] = iso8601_to_seconds(iso)
+        except Exception as e:
+            print(f"⚠️ Error fetching durations: {e}")
 
     return duration_map
 
-# ---------------- MAIN ----------------
-pending_videos = []
+# ---------------- MAIN LOGIC ----------------
+rss_videos = []
 
+# 1. Gather all videos from RSS
 for channel_id in CHANNEL_IDS:
     print(f"\n🔍 Fetching channel: {channel_id}")
     videos = fetch_videos_from_channel(channel_id)
     print(f"📺 Videos in RSS: {len(videos)}")
-
     total_fetched += len(videos)
+    rss_videos.extend(videos)
 
-    for v in videos:
-        if v["video_id"] in existing_ids:
-            total_skipped += 1
-            continue
-        pending_videos.append(v)
+# 2. Filter out Existing IDs (Local Check)
+candidates = []
+for v in rss_videos:
+    if v["video_id"] in existing_ids:
+        total_skipped_existing += 1
+        continue
+    # De-duplicate duplicates within RSS feeds themselves
+    if any(c["video_id"] == v["video_id"] for c in candidates):
+        continue
+    candidates.append(v)
 
-# ---------------- FETCH DURATIONS (1 API CALL) ----------------
-video_ids = [v["video_id"] for v in pending_videos][:50]
-duration_map = fetch_durations_batch(video_ids)
+print(f"\n📝 Candidates after DB check: {len(candidates)}")
 
-print(f"⏱️ Durations fetched for {len(duration_map)} videos (1 API unit)")
+if not candidates:
+    print("✅ No new videos to process.")
+    sys.exit(0)
 
-# ---------------- INSERT FINAL VIDEOS ----------------
-for v in pending_videos:
-    duration = duration_map.get(v["video_id"], 0)
+candidate_ids = [v["video_id"] for v in candidates]
 
+# 3. Check Live Status (API Call 1 - Batched)
+print("\n📡 Checking Live/Upcoming status...")
+live_ids_to_exclude = get_live_status_batch(candidate_ids)
+total_skipped_live = len(live_ids_to_exclude)
+
+# Remove live videos from candidates
+vod_candidates = [v for v in candidates if v["video_id"] not in live_ids_to_exclude]
+vod_candidate_ids = [v["video_id"] for v in vod_candidates]
+
+print(f"📉 Remaining after Live filter: {len(vod_candidates)}")
+
+# 4. Check Durations (API Call 2 - Batched)
+# Only check duration for videos that passed the Live check
+print("\n⏱️ Checking Durations...")
+duration_map = fetch_durations_batch(vod_candidate_ids)
+
+# 5. Insert Final Videos
+print("\n🚀 Starting Firebase Insertion...")
+for v in vod_candidates:
+    vid = v["video_id"]
+    duration = duration_map.get(vid, 0)
+
+    # Duration Check
     if duration < MIN_DURATION_SECONDS:
-        print(f"⏭️ Skipped short ({duration}s):", v["video_id"])
-        total_skipped += 1
+        print(f"⏭️ Skipped short ({duration}s): {vid}")
+        total_skipped_short += 1
         continue
 
+    # Insert to Firebase
     db.collection(COLLECTION_NAME).document().set({
         "title": v["title"],
         "url": v["url"],
@@ -177,15 +260,16 @@ for v in pending_videos:
         "timestamp": str(int(v["published"].timestamp() * 1000)),
     })
 
-    existing_ids.add(v["video_id"])
-    new_ids_added.append(v["video_id"])
+    existing_ids.add(vid)
+    new_ids_added.append(vid)
     total_inserted += 1
 
-    print(f"➕ Inserted ({duration}s):", v["video_id"])
+    print(f"➕ Inserted ({duration}s): {vid} - {v['title'][:30]}...")
     time.sleep(0.03)
 
 # ---------------- UPDATE ID INDEX ----------------
 if new_ids_added:
+    print(f"\n💾 Updating {ALL_IDS_DOC} index...")
     ids_doc_ref.set({
         "video_id": list(existing_ids),
         "total_count": len(existing_ids)
@@ -193,8 +277,10 @@ if new_ids_added:
 
 # ---------------- SUMMARY ----------------
 print("\n================ SUMMARY ================")
-print(f"📥 Total fetched  : {total_fetched}")
-print(f"⏭️  Videos skipped : {total_skipped}")
-print(f"➕ Videos inserted : {total_inserted}")
-print(f"📊 Firebase total : {len(existing_ids)}")
+print(f"📥 Total RSS Fetched   : {total_fetched}")
+print(f"⏭️  Skipped (Existing)  : {total_skipped_existing}")
+print(f"🚫 Skipped (Live/Upc)  : {total_skipped_live}")
+print(f"Too Short (<{MIN_DURATION_SECONDS}s)      : {total_skipped_short}")
+print(f"➕ Videos Inserted     : {total_inserted}")
+print(f"📊 New Firebase Total  : {len(existing_ids)}")
 print("========================================")
