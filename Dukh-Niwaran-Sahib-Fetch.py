@@ -24,14 +24,25 @@ NS = {
 
 # ---------------- FIREBASE INIT ----------------
 if not firebase_admin._apps:
-    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
-    cred = credentials.Certificate(service_account_info)
+    cred = credentials.Certificate(json.loads(SERVICE_ACCOUNT_JSON))
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
+# ---------------- GET CURRENT FIREBASE URL ----------------
+def get_current_firebase_url():
+    docs = (
+        db.collection(COLLECTION_NAME)
+        .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID))
+        .limit(1)
+        .get()
+    )
+    if not docs:
+        return None
+    return docs[0].to_dict().get("url")
+
 # ---------------- RSS FETCH (LATEST 5 VIDEOS) ----------------
-def fetch_latest_5_videos():
+def fetch_latest_5_from_rss():
     response = requests.get(RSS_URL, timeout=15)
     response.raise_for_status()
 
@@ -39,11 +50,10 @@ def fetch_latest_5_videos():
     videos = []
 
     for entry in root.findall("atom:entry", NS):
-        title_el = entry.find("atom:title", NS)
         video_id_el = entry.find("yt:videoId", NS)
         published_el = entry.find("atom:published", NS)
 
-        if not title_el or not video_id_el or not published_el:
+        if video_id_el is None or published_el is None:
             continue
 
         published = datetime.fromisoformat(
@@ -52,47 +62,54 @@ def fetch_latest_5_videos():
 
         videos.append({
             "video_id": video_id_el.text.strip(),
-            "title": title_el.text.strip(),
             "published": published
         })
 
-    # Sort newest first and take top 5
     videos.sort(key=lambda x: x["published"], reverse=True)
     return videos[:5]
 
-# ---------------- YOUTUBE OFFICIAL API (1 CALL) ----------------
+# ---------------- YOUTUBE API (SINGLE CALL) ----------------
 def fetch_video_details(video_ids):
-    ids = ",".join(video_ids)
-
     url = "https://www.googleapis.com/youtube/v3/videos"
     params = {
+        "key": YOUTUBE_API_KEY,
         "part": "snippet,liveStreamingDetails",
-        "id": ids,
-        "key": YOUTUBE_API_KEY
+        "id": ",".join(video_ids),
+        "maxResults": 5
     }
 
     r = requests.get(url, params=params, timeout=20)
     r.raise_for_status()
-    return r.json().get("items", [])
+    return r.json()["items"]
 
 # ---------------- SELECT FINAL VIDEO ----------------
-def select_best_video(videos, api_items):
+def select_best_video(videos):
     live_video = None
-    latest_video = max(videos, key=lambda x: x["published"])
+    latest_video = None
+    latest_time = None
 
-    for item in api_items:
-        if item["snippet"].get("liveBroadcastContent") == "live":
-            live_video = item
+    for v in videos:
+        snippet = v["snippet"]
+        live_status = snippet.get("liveBroadcastContent")
+
+        published = datetime.fromisoformat(
+            snippet["publishedAt"].replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+
+        if latest_time is None or published > latest_time:
+            latest_time = published
+            latest_video = v
+
+        if live_status == "live":
+            live_video = v
             break
 
-    selected = live_video if live_video else next(
-        v for v in api_items if v["id"] == latest_video["video_id"]
-    )
+    final = live_video if live_video else latest_video
 
     return {
-        "imageUrl": f"https://i.ytimg.com/vi/{selected['id']}/hqdefault.jpg",
-        "title": selected["snippet"]["title"],
-        "url": f"https://www.youtube.com/watch?v={selected['id']}"
+        "title": final["snippet"]["title"],
+        "url": f"https://www.youtube.com/watch?v={final['id']}",
+        "imageUrl": final["snippet"]["thumbnails"]["high"]["url"]
     }
 
 # ---------------- FIRESTORE UPDATE ----------------
@@ -105,20 +122,20 @@ def update_firestore(data):
     )
 
     if not docs:
-        print("❌ No Firestore document found")
+        print("❌ No Firestore document found for channel")
         return
 
-    doc_ref = docs[0].reference
-    existing = docs[0].to_dict()
+    doc = docs[0]
+    existing = doc.to_dict()
 
     if existing.get("url") == data["url"]:
         print("⏭ No change detected. Skipping update.")
         return
 
-    doc_ref.update({
-        "imageUrl": data["imageUrl"],
+    doc.reference.update({
         "title": data["title"],
-        "url": data["url"]
+        "url": data["url"],
+        "imageUrl": data["imageUrl"]
     })
 
     print("✅ Firebase updated successfully")
@@ -126,23 +143,21 @@ def update_firestore(data):
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
 
-    latest_videos = fetch_latest_5_videos()
+    print("🔄 Fetching latest 5 videos from RSS...")
+    rss_videos = fetch_latest_5_from_rss()
 
-    if not latest_videos:
+    if not rss_videos:
         print("❌ No videos found in RSS")
         exit(0)
 
-    video_ids = [v["video_id"] for v in latest_videos]
+    video_ids = [v["video_id"] for v in rss_videos]
 
-    api_items = fetch_video_details(video_ids)
+    print("📡 Fetching video details from YouTube API (single call)...")
+    yt_videos = fetch_video_details(video_ids)
 
-    if not api_items:
-        print("❌ YouTube API returned no data")
-        exit(0)
+    final_video = select_best_video(yt_videos)
 
-    final_video = select_best_video(latest_videos, api_items)
-
-    print("🎯 FINAL SELECTED VIDEO")
+    print("🎯 Selected Video:")
     print(final_video)
 
     update_firestore(final_video)
