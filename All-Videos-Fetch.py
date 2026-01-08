@@ -22,35 +22,23 @@ CHANNEL_IDS = [
     "UCBe8nwY2SqWlrGKKcmxB0_w",
 ]
 
-# 🚫 Keywords to exclude (Case Insensitive)
 EXCLUDED_KEYWORDS = [
-    "Antim Ardaas",
     "antim ardaas",
-    "Samagam",
     "samagam",
-    "Promo",
-    "Mela",
-    "Nagar Kirtan",
+    "semagam", 
+    "promo",
+    "mela",
     "nagar kirtan",
-    "Teaser",
-    "Live",
+    "teaser",
     "live",
-    "Chaupai",
     "chaupai",
-    "Japji",
     "japji",
-    "Sukhmani",
     "sukhmani",
-    "Rehras",
     "rehras",
-    "semagam",
-    "Semagam",
-    "Ardaas",
     "ardaas",
     "ardas",
-    "Ardas",
-
 ]
+
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
 ALL_IDS_DOC = "-All_Videos_Id"
