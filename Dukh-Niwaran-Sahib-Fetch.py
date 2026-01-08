@@ -29,8 +29,6 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ---------------- LIVE CHECK (HTML, NO API) ----------------
-import re
-
 def is_video_live(video_url):
     try:
         print("🔗 Checking URL:", video_url)
@@ -50,48 +48,25 @@ def is_video_live(video_url):
         print("📦 Response size (chars):", len(r.text))
 
         if r.status_code != 200:
-            print("❌ Non-200 response")
             return False
 
         html = r.text
 
-        # 💾 SAVE RAW RESPONSE FOR DEBUGGING
-        with open("youtube_response_1Zt28cJsDlg.html", "w", encoding="utf-8") as f:
-        f.write(html)
+        # 💾 SAVE RAW RESPONSE FOR DEBUGGING (TXT)
+        with open("youtube_response_1Zt28cJsDlg.txt", "w", encoding="utf-8") as f:
+            f.write(html)
 
-        print("💾 Saved youtube_response_1Zt28cJsDlg.html")
+        print("💾 Saved youtube_response_1Zt28cJsDlg.txt")
 
-
-        # 🔍 DEBUG: check if ANY live keywords exist
         print("🔎 Contains 'isLiveNow'?", "isLiveNow" in html)
         print("🔎 Contains 'liveBroadcastDetails'?", "liveBroadcastDetails" in html)
-        print("🔎 Contains 'status\":\"LIVE\"'?", '"status":"LIVE"' in html)
 
-        # 🔍 DEBUG: print a small surrounding snippet if found
-        idx = html.find("isLiveNow")
-        if idx != -1:
-            print("🧩 Snippet around isLiveNow:")
-            print(html[idx-100:idx+100])
-
-        # ✅ ACTUAL CHECK
-        if re.search(r'"isLiveNow"\s*:\s*true', html):
-            print("✅ MATCHED isLiveNow:true")
-            return True
-
-        if '"status":"LIVE"' in html:
-            print("✅ MATCHED status:LIVE")
-            return True
-
-        if '"liveBroadcastDetails"' in html:
-            print("⚠ Found liveBroadcastDetails (weak signal)")
-            return True
-
-        print("❌ No live signals detected")
         return False
 
     except Exception as e:
         print("⚠ Live check exception:", e)
         return False
+
 
 
 # ---------------- GET CURRENT FIREBASE URL ----------------
