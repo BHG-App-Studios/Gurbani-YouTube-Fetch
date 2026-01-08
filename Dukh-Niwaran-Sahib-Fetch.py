@@ -33,6 +33,8 @@ import re
 
 def is_video_live(video_url):
     try:
+        print("🔗 Checking URL:", video_url)
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -44,27 +46,44 @@ def is_video_live(video_url):
 
         r = requests.get(video_url, headers=headers, timeout=20)
 
+        print("🌐 HTTP status:", r.status_code)
+        print("📦 Response size (chars):", len(r.text))
+
         if r.status_code != 200:
-            print("⚠ HTTP status:", r.status_code)
+            print("❌ Non-200 response")
             return False
 
         html = r.text
 
-        # ✅ MOST RELIABLE SIGNAL
+        # 🔍 DEBUG: check if ANY live keywords exist
+        print("🔎 Contains 'isLiveNow'?", "isLiveNow" in html)
+        print("🔎 Contains 'liveBroadcastDetails'?", "liveBroadcastDetails" in html)
+        print("🔎 Contains 'status\":\"LIVE\"'?", '"status":"LIVE"' in html)
+
+        # 🔍 DEBUG: print a small surrounding snippet if found
+        idx = html.find("isLiveNow")
+        if idx != -1:
+            print("🧩 Snippet around isLiveNow:")
+            print(html[idx-100:idx+100])
+
+        # ✅ ACTUAL CHECK
         if re.search(r'"isLiveNow"\s*:\s*true', html):
+            print("✅ MATCHED isLiveNow:true")
             return True
 
-        # 🟡 Fallback signals
         if '"status":"LIVE"' in html:
+            print("✅ MATCHED status:LIVE")
             return True
 
         if '"liveBroadcastDetails"' in html:
+            print("⚠ Found liveBroadcastDetails (weak signal)")
             return True
 
+        print("❌ No live signals detected")
         return False
 
     except Exception as e:
-        print("⚠ Live check failed:", e)
+        print("⚠ Live check exception:", e)
         return False
 
 
@@ -155,6 +174,8 @@ if __name__ == "__main__":
 
     # 🔎 STEP 1: Check current Firebase URL first
     current_url = get_current_firebase_url()
+    print("📄 Firebase current_url =", current_url)
+
 
     if current_url:
         print("🔍 Checking current Firebase URL live status...")
