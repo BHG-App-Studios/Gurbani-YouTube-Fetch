@@ -281,7 +281,7 @@ for v in vod_candidates:
         "title": v["title"],
         "url": v["url"],
         "imageUrl": v["imageUrl"],
-        "timestamp": str(int(v["published"].timestamp() * 1000)), 
+        "timestamp": str(int(time.time() * 1000)),
     })
 
     existing_ids.add(vid)
