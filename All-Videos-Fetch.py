@@ -22,6 +22,7 @@ CHANNEL_IDS = [
     "UCBe8nwY2SqWlrGKKcmxB0_w",
 ]
 
+# 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
 EXCLUDED_KEYWORDS = [
     "antim ardaas",
     "samagam",
@@ -38,7 +39,6 @@ EXCLUDED_KEYWORDS = [
     "ardaas",
     "ardas",
 ]
-
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
 ALL_IDS_DOC = "-All_Videos_Id"
@@ -133,14 +133,7 @@ def chunk_list(data, chunk_size):
 
 # ---------------- API HELPER: CHECK LIVE STATUS ----------------
 def get_live_status_batch(video_ids):
-    """
-    Checks 'snippet.liveBroadcastContent'.
-    Returns a set of video_ids that ARE live or upcoming (to be excluded).
-    """
     live_or_upcoming_ids = set()
-    
-    # Process in chunks of 50 (YouTube API limit is 50)
-    # Using 30 as requested for safety
     CHUNK_SIZE = 30 
     
     for chunk in chunk_list(video_ids, CHUNK_SIZE):
@@ -159,9 +152,6 @@ def get_live_status_batch(video_ids):
             
             for item in data.get("items", []):
                 vid = item["id"]
-                # 'none' = completed/vod (keep)
-                # 'live' = currently live (exclude)
-                # 'upcoming' = scheduled (exclude)
                 broadcast_content = item["snippet"].get("liveBroadcastContent", "none")
                 
                 if broadcast_content in ["live", "upcoming"]:
@@ -184,9 +174,6 @@ def iso8601_to_seconds(duration):
     return h * 3600 + m * 60 + s
 
 def fetch_durations_batch(video_ids):
-    """
-    Fetch durations for videos in chunks.
-    """
     duration_map = {}
     CHUNK_SIZE = 50 
 
@@ -230,7 +217,6 @@ for v in rss_videos:
     if v["video_id"] in existing_ids:
         total_skipped_existing += 1
         continue
-    # De-duplicate duplicates within RSS feeds themselves
     if any(c["video_id"] == v["video_id"] for c in candidates):
         continue
     candidates.append(v)
@@ -248,7 +234,6 @@ print("\n📡 Checking Live/Upcoming status...")
 live_ids_to_exclude = get_live_status_batch(candidate_ids)
 total_skipped_live = len(live_ids_to_exclude)
 
-# Remove live videos from candidates
 vod_candidates = [v for v in candidates if v["video_id"] not in live_ids_to_exclude]
 vod_candidate_ids = [v["video_id"] for v in vod_candidates]
 
@@ -268,12 +253,14 @@ for v in vod_candidates:
     vid = v["video_id"]
     duration = duration_map.get(vid, 0)
     title = v["title"]
-
-    # --- FILTER 1: Title Keywords (Case Insensitive) ---
-    # We check if any excluded keyword exists in the title
+    
+    # --- FILTER 1: Title Keywords (Regex Whole Word) ---
     found_keyword = False
     for keyword in EXCLUDED_KEYWORDS:
-        if keyword.lower() in title.lower():
+        # \b ensures "ardas" does NOT match "sardara"
+        # re.IGNORECASE makes it case insensitive
+        pattern = r"\b" + re.escape(keyword) + r"\b"
+        if re.search(pattern, title, re.IGNORECASE):
             found_keyword = True
             print(f"🛑 Skipped (Keyword '{keyword}'): {title[:40]}...")
             break
@@ -289,12 +276,12 @@ for v in vod_candidates:
         continue
 
     # --- INSERT ---
-    # Using v["published"] ensures the correct video date is saved
+    # FIXED: Using v["published"] instead of time.time()
     db.collection(COLLECTION_NAME).document().set({
         "title": v["title"],
         "url": v["url"],
         "imageUrl": v["imageUrl"],
-        "timestamp": str(int(time.time() * 1000)), 
+        "timestamp": str(int(v["published"].timestamp() * 1000)), 
     })
 
     existing_ids.add(vid)
