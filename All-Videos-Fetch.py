@@ -15,6 +15,11 @@ CHANNEL_IDS = [
     "UC884UDwNldmpdEiS1mgtijA",
     "UC_JnnWTC6gHc59JwfMPTjdw",
     "UCQroafhIKCxeQ0e9jj-O51Q",
+    "UC71aJD7c8-FWf-nJ7ug2sfg",
+    "UCUjIneSnBylQOqAk7n7i33A",
+    "UC1wecYlMxn33DPHrhHHUyVw",
+    "UCh0LDn5Drt44tITPoQiiJ6Q",
+    "UCBe8nwY2SqWlrGKKcmxB0_w",
 ]
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
