@@ -35,7 +35,21 @@ EXCLUDED_KEYWORDS = [
     "Teaser",
     "Live",
     "live",
-    # Add more keywords here
+    "Chaupai",
+    "chaupai",
+    "Japji",
+    "japji",
+    "Sukhmani",
+    "sukhmani",
+    "Rehras",
+    "rehras",
+    "semagam",
+    "Semagam",
+    "Ardaas",
+    "ardaas",
+    "ardas",
+    "Ardas",
+
 ]
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
