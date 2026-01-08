@@ -48,20 +48,6 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           python Fatehgarh-Sahib-Hukamnama-Fetch.py
-
-      # ---------------- Live Paath ----------------
-
-      - name: 🕉️ Run Live Japji Sahib Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          python Live-Japji-Sahib.py
-
-      - name: 🕉️ Run Live Rehras Sahib Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          python Live-Rehras-Sahib.py
           
 
       # ---------------- Historic Gurdwaras ----------------
