@@ -79,6 +79,7 @@ jobs:
       - name: 🛕 Run Dukh Niwaran Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           python Dukh-Niwaran-Sahib-Fetch.py
 
