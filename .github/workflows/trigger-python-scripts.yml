@@ -95,6 +95,13 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           python Dukh-Niwaran-Sahib-Fetch.py
+ 
+      - name: 📦 Upload YouTube HTML debug response
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-html-debug
+          path: youtube_response_1Zt28cJsDlg.html
+
 
       - name: 🛕 Run Dukh Niwaran Sahib Surrey Fetch
         env:
