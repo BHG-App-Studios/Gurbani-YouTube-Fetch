@@ -1,6 +1,8 @@
 name: Trigger Python Scripts
 
 on:
+  schedule:
+    - cron: "*/10 * * * *"   
   workflow_dispatch:
 
 jobs:
