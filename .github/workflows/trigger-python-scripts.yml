@@ -96,11 +96,12 @@ jobs:
         run: |
           python Dukh-Niwaran-Sahib-Fetch.py
  
-      - name: 📦 Upload YouTube HTML debug response
+      - name: 📦 Upload YouTube TXT debug response
         uses: actions/upload-artifact@v4
         with:
           name: youtube-html-debug
-          path: youtube_response_1Zt28cJsDlg.html
+          path: youtube_response_1Zt28cJsDlg.txt
+
 
 
       - name: 🛕 Run Dukh Niwaran Sahib Surrey Fetch
