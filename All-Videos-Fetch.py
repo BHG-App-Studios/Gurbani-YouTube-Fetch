@@ -22,6 +22,22 @@ CHANNEL_IDS = [
     "UCBe8nwY2SqWlrGKKcmxB0_w",
 ]
 
+# 🚫 Keywords to exclude (Case Insensitive)
+EXCLUDED_KEYWORDS = [
+    "Antim Ardaas",
+    "antim ardaas",
+    "Samagam",
+    "samagam",
+    "Promo",
+    "Mela",
+    "Nagar Kirtan",
+    "nagar kirtan",
+    "Teaser",
+    "Live",
+    "live",
+    # Add more keywords here
+]
+
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
 ALL_IDS_DOC = "-All_Videos_Id"
 MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes
@@ -64,6 +80,7 @@ total_fetched = 0
 total_skipped_existing = 0
 total_skipped_live = 0
 total_skipped_short = 0
+total_skipped_keywords = 0
 total_inserted = 0
 new_ids_added = []
 
@@ -121,7 +138,7 @@ def get_live_status_batch(video_ids):
     live_or_upcoming_ids = set()
     
     # Process in chunks of 50 (YouTube API limit is 50)
-    # You requested 30, but 50 is safe. We can use 30 to be extra safe.
+    # Using 30 as requested for safety
     CHUNK_SIZE = 30 
     
     for chunk in chunk_list(video_ids, CHUNK_SIZE):
@@ -235,36 +252,54 @@ vod_candidate_ids = [v["video_id"] for v in vod_candidates]
 
 print(f"📉 Remaining after Live filter: {len(vod_candidates)}")
 
+if not vod_candidates:
+    print("✅ No videos remaining after live check.")
+    sys.exit(0)
+
 # 4. Check Durations (API Call 2 - Batched)
-# Only check duration for videos that passed the Live check
 print("\n⏱️ Checking Durations...")
 duration_map = fetch_durations_batch(vod_candidate_ids)
 
 # 5. Insert Final Videos
-print("\n🚀 Starting Firebase Insertion...")
+print("\n🚀 Starting Final Filtering & Firebase Insertion...")
 for v in vod_candidates:
     vid = v["video_id"]
     duration = duration_map.get(vid, 0)
+    title = v["title"]
 
-    # Duration Check
+    # --- FILTER 1: Title Keywords (Case Insensitive) ---
+    # We check if any excluded keyword exists in the title
+    found_keyword = False
+    for keyword in EXCLUDED_KEYWORDS:
+        if keyword.lower() in title.lower():
+            found_keyword = True
+            print(f"🛑 Skipped (Keyword '{keyword}'): {title[:40]}...")
+            break
+            
+    if found_keyword:
+        total_skipped_keywords += 1
+        continue
+
+    # --- FILTER 2: Duration ---
     if duration < MIN_DURATION_SECONDS:
         print(f"⏭️ Skipped short ({duration}s): {vid}")
         total_skipped_short += 1
         continue
 
-    # Insert to Firebase
+    # --- INSERT ---
+    # Using v["published"] ensures the correct video date is saved
     db.collection(COLLECTION_NAME).document().set({
         "title": v["title"],
         "url": v["url"],
         "imageUrl": v["imageUrl"],
-        "timestamp": str(int(time.time() * 1000)),
+        "timestamp": str(int(time.time() * 1000)), 
     })
 
     existing_ids.add(vid)
     new_ids_added.append(vid)
     total_inserted += 1
 
-    print(f"➕ Inserted ({duration}s): {vid} - {v['title'][:30]}...")
+    print(f"➕ Inserted ({duration}s): {vid} - {title[:30]}...")
     time.sleep(0.03)
 
 # ---------------- UPDATE ID INDEX ----------------
@@ -280,7 +315,8 @@ print("\n================ SUMMARY ================")
 print(f"📥 Total RSS Fetched   : {total_fetched}")
 print(f"⏭️  Skipped (Existing)  : {total_skipped_existing}")
 print(f"🚫 Skipped (Live/Upc)  : {total_skipped_live}")
-print(f"Too Short (<{MIN_DURATION_SECONDS}s)      : {total_skipped_short}")
+print(f"🛑 Skipped (Keywords)  : {total_skipped_keywords}")
+print(f"✂️  Skipped (Short)     : {total_skipped_short}")
 print(f"➕ Videos Inserted     : {total_inserted}")
 print(f"📊 New Firebase Total  : {len(existing_ids)}")
 print("========================================")
