@@ -5,12 +5,15 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 import os
+from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCY8jMpyRRcdzSf6uLiU6izQ"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
 SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
+YOUTUBE_API_KEY = os.environ["YOUTUBE_API_KEY"]
+
 COLLECTION_NAME = "liveStreams"
 # --------------------------------------
 
@@ -21,14 +24,13 @@ NS = {
 
 # ---------------- FIREBASE INIT ----------------
 if not firebase_admin._apps:
-    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
-    cred = credentials.Certificate(service_account_info)
+    cred = credentials.Certificate(json.loads(SERVICE_ACCOUNT_JSON))
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
-# ---------------- RSS FETCH ----------------
-def fetch_latest_stream():
+# ---------------- RSS FETCH (LATEST 5 MATCHES) ----------------
+def fetch_latest_5_matching():
     response = requests.get(RSS_URL, timeout=15)
     response.raise_for_status()
 
@@ -45,7 +47,7 @@ def fetch_latest_stream():
 
         title = title_el.text.strip()
 
-        # ✅ FILTER: Official SGPC LIVE | Takht Sri Damdama Sahib ONLY
+        # ✅ FILTER: Official SGPC LIVE | Takht Sri Damdama Sahib ONLY (UNCHANGED)
         if "Official SGPC LIVE | Takht Sri Damdama Sahib" not in title:
             continue
 
@@ -60,20 +62,61 @@ def fetch_latest_stream():
         })
 
     if not matches:
+        return []
+
+    # ✅ SORT BY TIME & TAKE LATEST 5
+    matches.sort(key=lambda x: x["published"], reverse=True)
+    return matches[:5]
+
+# ---------------- YOUTUBE API (SINGLE CALL) ----------------
+def fetch_video_details(video_ids):
+    url = "https://www.googleapis.com/youtube/v3/videos"
+    params = {
+        "key": YOUTUBE_API_KEY,
+        "part": "snippet,liveStreamingDetails",
+        "id": ",".join(video_ids),
+        "maxResults": 5
+    }
+
+    r = requests.get(url, params=params, timeout=20)
+    r.raise_for_status()
+    return r.json().get("items", [])
+
+# ---------------- SELECT FINAL VIDEO ----------------
+def select_best_video(rss_videos, yt_videos):
+    yt_map = {v["id"]: v for v in yt_videos}
+
+    live_candidate = None
+    latest_candidate = None
+    latest_time = None
+
+    for v in rss_videos:
+        yt = yt_map.get(v["video_id"])
+        if not yt:
+            continue
+
+        snippet = yt["snippet"]
+        live_status = snippet.get("liveBroadcastContent")
+
+        if latest_time is None or v["published"] > latest_time:
+            latest_time = v["published"]
+            latest_candidate = yt
+
+        if live_status == "live":
+            live_candidate = yt
+            break
+
+    final = live_candidate if live_candidate else latest_candidate
+    if not final:
         return None
 
-    # ✅ LATEST ONLY
-    latest = max(matches, key=lambda x: x["published"])
-
     return {
-        "imageUrl": f"https://i.ytimg.com/vi/{latest['video_id']}/hqdefault.jpg",
-        "title": latest["title"],
-        "url": f"https://www.youtube.com/watch?v={latest['video_id']}"
+        "title": final["snippet"]["title"],
+        "url": f"https://www.youtube.com/watch?v={final['id']}",
+        "imageUrl": final["snippet"]["thumbnails"]["high"]["url"]
     }
 
 # ---------------- FIRESTORE UPDATE ----------------
-from google.cloud.firestore_v1 import FieldFilter
-
 def update_firestore(data):
     docs = (
         db.collection(COLLECTION_NAME)
@@ -87,16 +130,14 @@ def update_firestore(data):
         return
 
     doc = docs[0]
-    doc_ref = doc.reference
     existing = doc.to_dict()
 
-    # 🔒 CHANGE-DETECTION
+    # 🔒 CHANGE-DETECTION (UNCHANGED)
     if existing.get("url") == data["url"]:
         print("⏭ No change detected (same Official SGPC LIVE | Takht Sri Damdama Sahib). Skipping update.")
         return
 
-    # ✅ UPDATE ONLY IF CHANGED
-    doc_ref.update({
+    doc.reference.update({
         "imageUrl": data["imageUrl"],
         "title": data["title"],
         "url": data["url"]
@@ -106,11 +147,26 @@ def update_firestore(data):
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
-    result = fetch_latest_stream()
 
-    if not result:
+    print("🔄 Fetching latest Official SGPC LIVE | Takht Sri Damdama Sahib videos from RSS...")
+    rss_videos = fetch_latest_5_matching()
+
+    if not rss_videos:
         print("❌ No Official SGPC LIVE | Takht Sri Damdama Sahib video found")
-    else:
-        print("🎯 Selected Official SGPC LIVE | Takht Sri Damdama Sahib:")
-        print(result)
-        update_firestore(result)
+        exit(0)
+
+    video_ids = [v["video_id"] for v in rss_videos]
+
+    print("📡 Fetching video details from YouTube API (single call)...")
+    yt_videos = fetch_video_details(video_ids)
+
+    final_video = select_best_video(rss_videos, yt_videos)
+
+    if not final_video:
+        print("❌ No valid video selected")
+        exit(0)
+
+    print("🎯 Selected Official SGPC LIVE | Takht Sri Damdama Sahib:")
+    print(final_video)
+
+    update_firestore(final_video)
