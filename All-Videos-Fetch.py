@@ -42,6 +42,7 @@ EXCLUDED_KEYWORDS = [
     "ardas",
     "bhog",
     "bhogg",
+    "akhand",
 ]
 
 COLLECTION_NAME = "Listen_Kirtans_Videos_New"
