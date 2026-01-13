@@ -124,7 +124,7 @@ def fetch_videos_from_channel(channel_id):
             "video_id": video_id,
             "title": title_el.text.strip(),
             "url": f"https://www.youtube.com/watch?v={video_id}",
-            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
             "published": published_dt
         })
 
