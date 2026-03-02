@@ -287,6 +287,7 @@ for v in vod_candidates:
     # FIXED: Using v["published"] instead of time.time()
     db.collection(COLLECTION_NAME).document().set({
         "title": v["title"],
+        "titleLowercase": v["title"].lower(),
         "url": v["url"],
         "imageUrl": v["imageUrl"],
         "timestamp": str(int(time.time() * 1000)),
