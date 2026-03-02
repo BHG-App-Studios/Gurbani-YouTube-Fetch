@@ -181,6 +181,31 @@ def iso8601_to_seconds(duration):
     s = int(match.group(3) or 0)
     return h * 3600 + m * 60 + s
 
+
+
+# ---------------- SEARCH HELPER ----------------
+def generate_search_keywords(title):
+    if not isinstance(title, str):
+        return []
+        
+    # Split by spaces, pipes, and common punctuation
+    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
+    keywords = set()
+    
+    for word in words:
+        word = word.strip()
+        if len(word) > 0:
+            prefix = ""
+            for char in word:
+                prefix += char
+                # Add to set if it's not empty space
+                if prefix.strip():
+                    keywords.add(prefix)
+                    
+    return list(keywords)
+
+
+
 def fetch_durations_batch(video_ids):
     duration_map = {}
     CHUNK_SIZE = 50 
@@ -288,6 +313,7 @@ for v in vod_candidates:
     db.collection(COLLECTION_NAME).document().set({
         "title": v["title"],
         "titleLowercase": v["title"].lower(),
+        "searchKeywords": generate_search_keywords(v["title"]),
         "url": v["url"],
         "imageUrl": v["imageUrl"],
         "timestamp": str(int(time.time() * 1000)),
