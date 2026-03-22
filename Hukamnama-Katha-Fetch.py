@@ -27,6 +27,22 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
+# ---------------- API HELPER: CHECK IMAGE URL ----------------
+def get_working_image_url(video_id):
+    """Pings the maxres image. If 404, falls back to hqdefault_live"""
+    maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+    fallback_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault_live.jpg"
+    
+    try:
+        # HEAD is faster because it doesn't download the image body, just the status
+        response = requests.head(maxres_url, timeout=5)
+        if response.status_code == 200:
+            return maxres_url
+    except Exception:
+        pass # Ignore timeouts/errors and just fallback
+        
+    return fallback_url
+
 # ---------------- RSS FETCH ----------------
 def fetch_latest_hukamnama_katha():
     response = requests.get(RSS_URL, timeout=15)
@@ -66,7 +82,8 @@ def fetch_latest_hukamnama_katha():
     latest = max(matches, key=lambda x: x["published"])
 
     return {
-        "imageUrl": f"https://i.ytimg.com/vi/{latest['video_id']}/hqdefault.jpg",
+        # 👇 CHANGED: Now uses the helper function to check the image URL
+        "imageUrl": get_working_image_url(latest['video_id']),
         "title": latest["title"],
         "url": f"https://www.youtube.com/watch?v={latest['video_id']}"
     }
