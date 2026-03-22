@@ -12,7 +12,6 @@ import re
 
 # ---------------- CONFIG ----------------
 CHANNEL_IDS = [
-    
     "UC884UDwNldmpdEiS1mgtijA",
     "UC_JnnWTC6gHc59JwfMPTjdw",
     "UCQroafhIKCxeQ0e9jj-O51Q",
@@ -21,7 +20,6 @@ CHANNEL_IDS = [
     "UC1wecYlMxn33DPHrhHHUyVw",
     "UCh0LDn5Drt44tITPoQiiJ6Q",
     "UCBe8nwY2SqWlrGKKcmxB0_w",
-    
 ]
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
@@ -181,8 +179,6 @@ def iso8601_to_seconds(duration):
     s = int(match.group(3) or 0)
     return h * 3600 + m * 60 + s
 
-
-
 # ---------------- SEARCH HELPER ----------------
 def generate_search_keywords(title):
     if not isinstance(title, str):
@@ -203,7 +199,6 @@ def generate_search_keywords(title):
                     keywords.add(prefix)
                     
     return list(keywords)
-
 
 
 def fetch_durations_batch(video_ids):
@@ -232,6 +227,23 @@ def fetch_durations_batch(video_ids):
             print(f"⚠️ Error fetching durations: {e}")
 
     return duration_map
+
+# ---------------- API HELPER: CHECK IMAGE URL ----------------
+def get_working_image_url(video_id):
+    """Pings the maxres image. If 404, falls back to hqdefault_live"""
+    maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+    fallback_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault_live.jpg"
+    
+    try:
+        # HEAD is faster because it doesn't download the image body, just the status
+        response = requests.head(maxres_url, timeout=5)
+        if response.status_code == 200:
+            return maxres_url
+    except Exception:
+        pass # Ignore timeouts/errors and just fallback
+        
+    return fallback_url
+
 
 # ---------------- MAIN LOGIC ----------------
 rss_videos = []
@@ -308,6 +320,9 @@ for v in vod_candidates:
         total_skipped_short += 1
         continue
 
+    # --- CHECK FINAL IMAGE URL ---
+    final_image_url = get_working_image_url(vid)
+
     # --- INSERT ---
     # FIXED: Using v["published"] instead of time.time()
     db.collection(COLLECTION_NAME).document().set({
@@ -315,7 +330,7 @@ for v in vod_candidates:
         "titleLowercase": v["title"].lower(),
         "searchKeywords": generate_search_keywords(v["title"]),
         "url": v["url"],
-        "imageUrl": v["imageUrl"],
+        "imageUrl": final_image_url,  # <--- Now uses the checked/fallback image
         "timestamp": str(int(time.time() * 1000)),
     })
 
