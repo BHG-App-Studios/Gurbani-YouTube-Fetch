@@ -6,6 +6,9 @@ on:
 jobs:
   update-live-streams:
     runs-on: ubuntu-latest
+    
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: 📥 Checkout repository
@@ -27,30 +30,25 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Harmandir-Sahib-Fetch.py
+        run: python Harmandir-Sahib-Fetch.py
 
       - name: 📖 Run Hukamnama Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Hukamnama-Fetch.py
+        run: python Hukamnama-Fetch.py
 
       - name: 📖 Run Hukamnama Katha Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Hukamnama-Katha-Fetch.py
+        run: python Hukamnama-Katha-Fetch.py
 
       - name: 📖 Run Fatehgarh Sahib Hukamnama Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Fatehgarh-Sahib-Hukamnama-Fetch.py
-          
+        run: python Fatehgarh-Sahib-Hukamnama-Fetch.py
 
       # ---------------- Historic Gurdwaras ----------------
 
@@ -58,68 +56,55 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Bangla-Sahib-Fetch.py
+        run: python Bangla-Sahib-Fetch.py
 
       - name: 🛕 Run Fatehgarh Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Fatehgarh-Sahib-Fetch.py
+        run: python Fatehgarh-Sahib-Fetch.py
 
       - name: 🛕 Run Takht Sri Kesgarh Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Takht-Sri-Kesgarh-Sahib-Fetch.py
-
+        run: python Takht-Sri-Kesgarh-Sahib-Fetch.py
 
       - name: 🛕 Run Takht Sri Patna Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Takht-Sri-Patna-Sahib-Fetch.py
-
-          
+        run: python Takht-Sri-Patna-Sahib-Fetch.py
 
       - name: 🛕 Run Damdama Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Damdama-Sahib-Fetch.py
+        run: python Damdama-Sahib-Fetch.py
 
       - name: 🛕 Run Dukh Niwaran Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Dukh-Niwaran-Sahib-Fetch.py
-
+        run: python Dukh-Niwaran-Sahib-Fetch.py
 
       - name: 🛕 Run Dukh Niwaran Sahib Surrey Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Dukh-Niwaran-Sahib-Surrey-Fetch.py
+        run: python Dukh-Niwaran-Sahib-Surrey-Fetch.py
 
       - name: 🛕 Run Shaheed Ganj Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Shaheed-Ganj-Sahib-Fetch.py
+        run: python Shaheed-Ganj-Sahib-Fetch.py
 
       - name: 🛕 Run Sis Ganj Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Sis-Ganj-Sahib-Fetch.py
+        run: python Sis-Ganj-Sahib-Fetch.py
 
       # ---------------- Special Kirtan ----------------
 
@@ -127,25 +112,21 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Baba-Deep-Singh-Kirtan-Fetch.py
+        run: python Baba-Deep-Singh-Kirtan-Fetch.py
 
-       # ---------------- Path fetch ----------------
+      # ---------------- Path fetch ----------------
 
       - name: 🎵 Run Rehras Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Rehras-Sahib-Fetch.py
-
+        run: python Rehras-Sahib-Fetch.py
 
       - name: 🎵 Run Japji Sahib Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python Japji-Sahib-Fetch.py
+        run: python Japji-Sahib-Fetch.py
 
       # ---------------- All Videos fetch ----------------
 
@@ -153,9 +134,4 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          python All-Videos-Fetch.py
-
-
-     
-
+        run: python All-Videos-Fetch.py
