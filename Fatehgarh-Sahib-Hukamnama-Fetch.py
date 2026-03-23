@@ -5,28 +5,43 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 import os
+import sys
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCudVHqnOekwcvpzNpY8_ERw"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
-SERVICE_ACCOUNT_JSON = os.environ["FIREBASE_SERVICE_ACCOUNT"]
-COLLECTION_NAME = "liveStreams"
-# --------------------------------------
+# Env variables for BOTH service accounts
+SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
+SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
+
+if not SERVICE_ACCOUNT_GURBANI or not SERVICE_ACCOUNT_HARMANDIR:
+    print("❌ FIREBASE_SERVICE_ACCOUNT env vars missing for one or both apps")
+    sys.exit(1)
+
+# Collection Names
+COLLECTION_GURBANI = "liveStreams"
+COLLECTION_HARMANDIR = "Live-Gurdwaras-YouTube"
 
 NS = {
     "atom": "http://www.w3.org/2005/Atom",
     "yt": "http://www.youtube.com/xml/schemas/2015"
 }
 
-# ---------------- FIREBASE INIT ----------------
-if not firebase_admin._apps:
-    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
-    cred = credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(cred)
+# ---------------- FIREBASE DUAL INIT ----------------
+print("🔌 Initializing Firebase Connections...")
 
-db = firestore.client()
+# App 1: Gurbani
+cred_gurbani = credentials.Certificate(json.loads(SERVICE_ACCOUNT_GURBANI))
+app_gurbani = firebase_admin.initialize_app(cred_gurbani, name='gurbani_app')
+db_gurbani = firestore.client(app=app_gurbani)
+
+# App 2: Harmandir Sahib
+cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
+app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
+db_harmandir = firestore.client(app=app_harmandir)
+
 
 # ---------------- API HELPER: CHECK IMAGE URL ----------------
 def get_working_image_url(video_id):
@@ -89,36 +104,57 @@ def fetch_latest_stream():
         "url": f"https://www.youtube.com/watch?v={latest['video_id']}"
     }
 
-# ---------------- FIRESTORE UPDATE ----------------
-def update_firestore(data):
-    docs = (
-        db.collection(COLLECTION_NAME)
-        .where(filter=FieldFilter("hukamnama_katha_fatehgarh_sahib", "==", CHANNEL_ID))
-        .limit(1)
-        .get()
-    )
-
-    if not docs:
-        print("❌ No Firestore document found with channel id matching")
-        return
-
-    doc = docs[0]
-    doc_ref = doc.reference
-    existing = doc.to_dict()
-
-    # 🔒 CHANGE-DETECTION
-    if existing.get("url") == data["url"]:
-        print("⏭ No change detected (same Official SGPC LIVE | Katha Hukamnama Sahib). Skipping update.")
-        return
-
-    # ✅ UPDATE ONLY IF CHANGED
-    doc_ref.update({
+# ---------------- FIRESTORE UPDATE DUAL DATABASES ----------------
+def update_firestore_dual(data):
+    print("\n📝 Updating Databases...")
+    
+    # --- Prepare Data for Gurbani App (Basic Fields Only) ---
+    gurbani_update_payload = {
         "imageUrl": data["imageUrl"],
         "title": data["title"],
         "url": data["url"]
-    })
+    }
 
-    print("✅ Official SGPC LIVE | Katha Hukamnama Sahib updated successfully")
+    # --- Prepare Data for Harmandir Sahib App (With lowercase, NO timestamp edit) ---
+    harmandir_update_payload = {
+        "imageUrl": data["imageUrl"],
+        "title": data["title"],
+        "url": data["url"],
+        "titleLowercase": data["title"].lower()
+    }
+
+    # helper function to execute update
+    def do_update(db_client, collection_name, app_name, payload):
+        docs = (
+            db_client.collection(collection_name)
+            # ❗ Important: Kept the specific query field from your original script
+            .where(filter=FieldFilter("hukamnama_katha_fatehgarh_sahib", "==", CHANNEL_ID))
+            .limit(1)
+            .get()
+        )
+
+        if not docs:
+            print(f"❌ No document found for channel ID in {app_name} (Collection: {collection_name})")
+            return
+
+        doc = docs[0]
+        existing = doc.to_dict()
+
+        # 🔒 CHANGE-DETECTION
+        if existing.get("url") == payload["url"]:
+            print(f"⏭ No change detected for {app_name}. Skipping update.")
+            return
+
+        # ✅ UPDATE ONLY IF CHANGED
+        doc.reference.update(payload)
+        print(f"✅ {app_name} updated successfully")
+
+    # Run for Gurbani
+    do_update(db_gurbani, COLLECTION_GURBANI, "Gurbani App", gurbani_update_payload)
+    
+    # Run for Harmandir Sahib
+    do_update(db_harmandir, COLLECTION_HARMANDIR, "Harmandir App", harmandir_update_payload)
+
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
@@ -128,5 +164,6 @@ if __name__ == "__main__":
         print("❌ No Official SGPC LIVE | Katha Hukamnama Sahib video found")
     else:
         print("🎯 Selected Official SGPC LIVE | Katha Hukamnama Sahib:")
-        print(result)
-        update_firestore(result)
+        print(f"Title: {result['title']}")
+        print(f"URL: {result['url']}")
+        update_firestore_dual(result)
