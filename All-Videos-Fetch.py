@@ -304,12 +304,11 @@ for v in vod_candidates:
         total_skipped_short += 1
         continue
 
-    # --- PREPARE DATA ---
+    # --- PREPARE DATA BASE (Shared by both) ---
     final_image_url = get_working_image_url(vid)
-    doc_data = {
+    base_doc_data = {
         "title": v["title"],
         "titleLowercase": v["title"].lower(),
-        "searchKeywords": generate_search_keywords(v["title"]),
         "url": v["url"],
         "imageUrl": final_image_url,
         "timestamp": str(int(time.time() * 1000)),
@@ -317,17 +316,20 @@ for v in vod_candidates:
 
     inserted_any = False
 
-    # Insert into Gurbani App DB if it's not already there
+    # Insert into Gurbani App DB (WITH searchKeywords)
     if vid not in existing_ids_gurbani:
-        db_gurbani.collection(COLLECTION_GURBANI).document().set(doc_data)
+        gurbani_doc_data = base_doc_data.copy()
+        gurbani_doc_data["searchKeywords"] = generate_search_keywords(v["title"])
+        
+        db_gurbani.collection(COLLECTION_GURBANI).document().set(gurbani_doc_data)
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
         inserted_any = True
 
-    # Insert into Harmandir Sahib App DB if it's not already there
+    # Insert into Harmandir Sahib App DB (WITHOUT searchKeywords)
     if vid not in existing_ids_harmandir:
-        db_harmandir.collection(COLLECTION_HARMANDIR).document().set(doc_data)
+        db_harmandir.collection(COLLECTION_HARMANDIR).document().set(base_doc_data)
         existing_ids_harmandir.add(vid)
         new_ids_harmandir.append(vid)
         total_inserted_harmandir += 1
