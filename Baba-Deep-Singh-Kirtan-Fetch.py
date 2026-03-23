@@ -9,7 +9,7 @@ import sys
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UCl2KY2TaNJ8jCwbO7CopvpA"
+CHANNEL_ID = "UC2p-B_igjgCNUURYmDeV9Dg"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
 # Env variables for BOTH service accounts
@@ -66,8 +66,8 @@ def fetch_latest_5_matching():
 
         title = title_el.text.strip()
 
-        # ✅ FILTER: Live Gurbani Shabad Kirtan ONLY
-        if "Live Gurbani Shabad Kirtan" not in title:
+        # ✅ FILTER: ਅੱਜ ਇਹ ਬਾਣੀ ਲਗਾ ਕੇ ਰਖੋ ਸਭ ਸੁੱਖ ਘਰ ਆਉਣਗੇ ਹਰ ਅਰਦਾਸ ਪੂਰੀ ਹੋਵੇਗੀ ONLY
+        if "ਅੱਜ ਇਹ ਬਾਣੀ ਲਗਾ ਕੇ ਰਖੋ ਸਭ ਸੁੱਖ ਘਰ ਆਉਣਗੇ ਹਰ ਅਰਦਾਸ ਪੂਰੀ ਹੋਵੇਗੀ" not in title:
             continue
 
         published = datetime.fromisoformat(
@@ -204,11 +204,11 @@ def update_firestore_dual(data):
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
 
-    print("🔄 Fetching latest Live Gurbani Shabad Kirtan videos from RSS...")
+    print("🔄 Fetching latest ਅੱਜ ਇਹ ਬਾਣੀ ਲਗਾ ਕੇ ਰਖੋ ਸਭ ਸੁੱਖ ਘਰ ਆਉਣਗੇ ਹਰ ਅਰਦਾਸ ਪੂਰੀ ਹੋਵੇਗੀ videos from RSS...")
     rss_videos = fetch_latest_5_matching()
 
     if not rss_videos:
-        print("❌ No Live Gurbani Shabad Kirtan video found")
+        print("❌ No ਅੱਜ ਇਹ ਬਾਣੀ ਲਗਾ ਕੇ ਰਖੋ ਸਭ ਸੁੱਖ ਘਰ ਆਉਣਗੇ ਹਰ ਅਰਦਾਸ ਪੂਰੀ ਹੋਵੇਗੀ video found")
         exit(0)
 
     video_ids = [v["video_id"] for v in rss_videos]
