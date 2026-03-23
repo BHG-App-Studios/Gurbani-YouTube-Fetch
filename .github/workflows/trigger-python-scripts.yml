@@ -129,9 +129,10 @@ jobs:
         run: python Japji-Sahib-Fetch.py
 
       # ---------------- All Videos fetch ----------------
-
+      
       - name: 🎵 Run Offline Youtube Videos Fetch
         env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python All-Videos-Fetch.py
