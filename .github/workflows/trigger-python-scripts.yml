@@ -141,6 +141,14 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python Japji-Sahib-Fetch.py
 
+
+      - name: 🎵 Run Mool Mantar Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python Mool-Mantar-Fetch.py
+
       # ---------------- All Videos fetch ----------------
       
       - name: 🎵 Run Offline Youtube Videos Fetch
