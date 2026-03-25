@@ -118,12 +118,12 @@ jobs:
 
       # ---------------- Special Kirtan ----------------
 
-      - name: 🎵 Run Baba Deep Singh Kirtan Fetch
+      - name: 🎵 Run 24 x 7 Kirtan Fetch Guru Nanak Dev Ji
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Baba-Deep-Singh-Kirtan-Fetch.py
+        run: python Live-24x7-Kirtan-Fetch.py
 
       # ---------------- Path fetch ----------------
 
