@@ -78,7 +78,7 @@ def fetch_latest_hukamnama_katha():
         title = title_el.text.strip()
 
         # ✅ FILTER: Today Hukamnama Sri Darbar Sahib ONLY
-        if "Today Hukamnama Sri Darbar Sahib" not in title:
+        if "Today Hukamnama Sri Darbar Sahib(" not in title:
             continue
 
         published = datetime.fromisoformat(
