@@ -9,7 +9,7 @@ import sys
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UCYn6UEtQ771a_OWSiNBoG8w"
+CHANNEL_ID = "UCD5a5KBLu4t7uZdoJQzEppg"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
 # Env variables for BOTH service accounts
@@ -77,8 +77,8 @@ def fetch_latest_hukamnama_katha():
 
         title = title_el.text.strip()
 
-        # ✅ FILTER: Hukamnama Sachkhand Sri Harmandir Sahib ONLY
-        if "Hukamnama Sachkhand Sri Harmandir Sahib" not in title:
+        # ✅ FILTER: Today Hukamnama Sri Darbar Sahib ONLY
+        if "Today Hukamnama Sri Darbar Sahib" not in title:
             continue
 
         published = datetime.fromisoformat(
@@ -161,9 +161,9 @@ if __name__ == "__main__":
     result = fetch_latest_hukamnama_katha()
 
     if not result:
-        print("❌ No Hukamnama Sachkhand Sri Harmandir Sahib video found")
+        print("❌ No Today Hukamnama Sri Darbar Sahib video found")
     else:
-        print("🎯 Selected Hukamnama Sachkhand Sri Harmandir Sahib:")
+        print("🎯 Selected Today Hukamnama Sri Darbar Sahib:")
         print(f"Title: {result['title']}")
         print(f"URL: {result['url']}")
         update_firestore_dual(result)
