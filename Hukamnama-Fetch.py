@@ -6,18 +6,26 @@ from firebase_admin import credentials, firestore
 import json
 import os
 import sys
+import re
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCD5a5KBLu4t7uZdoJQzEppg"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
-# Env variables for BOTH service accounts
+MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes
+
+# Env variables for BOTH service accounts & YouTube API
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 
 if not SERVICE_ACCOUNT_GURBANI or not SERVICE_ACCOUNT_HARMANDIR:
     print("❌ FIREBASE_SERVICE_ACCOUNT env vars missing for one or both apps")
+    sys.exit(1)
+
+if not YOUTUBE_API_KEY:
+    print("❌ YOUTUBE_API_KEY env var missing")
     sys.exit(1)
 
 # Collection Names
@@ -42,6 +50,42 @@ cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
 app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
 db_harmandir = firestore.client(app=app_harmandir)
 
+
+# ---------------- API HELPER: DURATION FETCH ----------------
+def chunk_list(data, chunk_size):
+    for i in range(0, len(data), chunk_size):
+        yield data[i:i + chunk_size]
+
+def iso8601_to_seconds(duration):
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
+    if not match: return 0
+    h = int(match.group(1) or 0)
+    m = int(match.group(2) or 0)
+    s = int(match.group(3) or 0)
+    return h * 3600 + m * 60 + s
+
+def fetch_durations_batch(video_ids):
+    duration_map = {}
+    CHUNK_SIZE = 50 
+    for chunk in chunk_list(video_ids, CHUNK_SIZE):
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "contentDetails",
+            "id": ",".join(chunk),
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 50
+        }
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            for item in data.get("items", []):
+                vid = item["id"]
+                iso = item["contentDetails"]["duration"]
+                duration_map[vid] = iso8601_to_seconds(iso)
+        except Exception as e:
+            print(f"⚠️ Error fetching durations: {e}")
+    return duration_map
 
 # ---------------- API HELPER: CHECK IMAGE URL ----------------
 def get_working_image_url(video_id):
@@ -94,8 +138,29 @@ def fetch_latest_hukamnama_katha():
     if not matches:
         return None
 
-    # ✅ LATEST ONLY
-    latest = max(matches, key=lambda x: x["published"])
+    # ✅ Sort matches by latest date first
+    matches.sort(key=lambda x: x["published"], reverse=True)
+
+    # Fetch duration for all matched candidate IDs in batch
+    candidate_ids = [m["video_id"] for m in matches]
+    duration_map = fetch_durations_batch(candidate_ids)
+
+    # Find the latest video that is longer than the MIN_DURATION
+    latest = None
+    for match in matches:
+        vid = match["video_id"]
+        duration = duration_map.get(vid, 0)
+        
+        if duration >= MIN_DURATION_SECONDS:
+            latest = match
+            print(f"✅ Found latest qualifying video (Duration: {duration}s): {vid}")
+            break
+        else:
+            print(f"⏭️ Skipping video (Duration: {duration}s < 180s): {vid}")
+
+    if not latest:
+        print("❌ No matching videos found that meet the 3-minute minimum length requirement.")
+        return None
 
     return {
         # 👇 CHANGED: Now uses the helper function to check the image URL
