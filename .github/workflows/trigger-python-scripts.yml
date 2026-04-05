@@ -157,6 +157,13 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python Mool-Mantar-Fetch.py
 
+      - name: 🎵 Run Fatehgarh Katha Hukamnama Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python Fatehgarh-Katha-Hukamnama-Fetch.py
+
 
 
       - name: 🎵 Run Dhan Ramdas Gur Fetch
