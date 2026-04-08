@@ -65,67 +65,6 @@ cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
 app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
 db_harmandir = firestore.client(app=app_harmandir)
 
-# ---------------- READ EXISTING IDS (2 READS) ----------------
-print(f"📖 Fetching existing Video IDs from {COLLECTION_NAME}...")
-
-# Read Gurbani DB
-doc_gurbani = db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
-existing_ids_gurbani = set(doc_gurbani.to_dict().get("video_id", [])) if doc_gurbani.exists else set()
-
-# Read Harmandir DB
-doc_harmandir = db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
-existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc_harmandir.exists else set()
-
-print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
-print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
-
-# ---------------- COUNTERS ----------------
-total_fetched = 0
-total_skipped_existing = 0
-total_skipped_not_live = 0
-total_skipped_keywords = 0
-total_inserted_gurbani = 0
-total_inserted_harmandir = 0
-new_ids_gurbani = []
-new_ids_harmandir = []
-
-# ---------------- RSS FETCH ----------------
-def fetch_videos_from_channel(channel_id):
-    url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-    try:
-        response = requests.get(url, timeout=20)
-        response.raise_for_status()
-    except Exception as e:
-        print(f"⚠️ Error fetching channel {channel_id}: {e}")
-        return []
-
-    root = ET.fromstring(response.text)
-    videos = []
-    entries = root.findall("atom:entry", NS)
-    
-    for entry in entries:
-        title_el = entry.find("atom:title", NS)
-        video_id_el = entry.find("yt:videoId", NS)
-        published_el = entry.find("atom:published", NS)
-
-        if title_el is None or video_id_el is None or published_el is None:
-            continue
-
-        published_dt = datetime.fromisoformat(
-            published_el.text.replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
-
-        video_id = video_id_el.text.strip()
-
-        videos.append({
-            "video_id": video_id,
-            "title": title_el.text.strip(),
-            "url": f"https://www.youtube.com/watch?v={video_id}",
-            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
-            "published": published_dt
-        })
-    return videos
-
 # ---------------- HELPER METHODS ----------------
 def chunk_list(data, chunk_size):
     for i in range(0, len(data), chunk_size):
@@ -184,12 +123,125 @@ def generate_search_keywords(title):
                     keywords.add(prefix)
     return list(keywords)
 
+# ---------------- READ EXISTING IDS (2 READS) ----------------
+print(f"\n📖 Fetching existing Video IDs from {COLLECTION_NAME}...")
+
+# Read Gurbani DB
+doc_gurbani = db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
+existing_ids_gurbani = set(doc_gurbani.to_dict().get("video_id", [])) if doc_gurbani.exists else set()
+
+# Read Harmandir DB
+doc_harmandir = db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
+existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc_harmandir.exists else set()
+
+print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
+print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
+
+# ---------------- CLEANUP STALE LIVE STREAMS (NEW LOGIC) ----------------
+all_existing_ids = existing_ids_gurbani.union(existing_ids_harmandir)
+total_deleted_gurbani = 0
+total_deleted_harmandir = 0
+
+if all_existing_ids:
+    print(f"\n🔄 Checking {len(all_existing_ids)} previously saved live streams...")
+    still_live_ids = get_ONLY_live_streams_batch(list(all_existing_ids))
+    stale_ids = all_existing_ids - still_live_ids
+
+    if stale_ids:
+        print(f"🗑️ Found {len(stale_ids)} streams no longer live. Cleaning up...")
+        
+        for vid in stale_ids:
+            target_url = f"https://www.youtube.com/watch?v={vid}"
+            
+            # Cleanup Gurbani
+            if vid in existing_ids_gurbani:
+                existing_ids_gurbani.remove(vid)
+                # Find and delete document by matching the url
+                docs = db_gurbani.collection(COLLECTION_NAME).where("url", "==", target_url).stream()
+                for doc in docs:
+                    doc.reference.delete()
+                total_deleted_gurbani += 1
+                
+            # Cleanup Harmandir
+            if vid in existing_ids_harmandir:
+                existing_ids_harmandir.remove(vid)
+                # Find and delete document by matching the url
+                docs = db_harmandir.collection(COLLECTION_NAME).where("url", "==", target_url).stream()
+                for doc in docs:
+                    doc.reference.delete()
+                total_deleted_harmandir += 1
+
+        # Update ALL_IDS_DOC arrays and counts for both apps after deletions
+        if total_deleted_gurbani > 0:
+            db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
+                "video_id": list(existing_ids_gurbani),
+                "total_count": len(existing_ids_gurbani)
+            }, merge=True)
+            print(f"✅ Updated Gurbani {ALL_IDS_DOC} (Removed {total_deleted_gurbani} stale streams)")
+
+        if total_deleted_harmandir > 0:
+            db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
+                "video_id": list(existing_ids_harmandir),
+                "total_count": len(existing_ids_harmandir)
+            }, merge=True)
+            print(f"✅ Updated Harmandir {ALL_IDS_DOC} (Removed {total_deleted_harmandir} stale streams)")
+    else:
+        print("✅ All previously saved streams are still actively live.")
+
+# ---------------- COUNTERS ----------------
+total_fetched = 0
+total_skipped_existing = 0
+total_skipped_not_live = 0
+total_skipped_keywords = 0
+total_inserted_gurbani = 0
+total_inserted_harmandir = 0
+new_ids_gurbani = []
+new_ids_harmandir = []
+
+# ---------------- RSS FETCH ----------------
+def fetch_videos_from_channel(channel_id):
+    url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"⚠️ Error fetching channel {channel_id}: {e}")
+        return []
+
+    root = ET.fromstring(response.text)
+    videos = []
+    entries = root.findall("atom:entry", NS)
+    
+    for entry in entries:
+        title_el = entry.find("atom:title", NS)
+        video_id_el = entry.find("yt:videoId", NS)
+        published_el = entry.find("atom:published", NS)
+
+        if title_el is None or video_id_el is None or published_el is None:
+            continue
+
+        published_dt = datetime.fromisoformat(
+            published_el.text.replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+
+        video_id = video_id_el.text.strip()
+
+        videos.append({
+            "video_id": video_id,
+            "title": title_el.text.strip(),
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
+            "published": published_dt
+        })
+    return videos
+
 # ---------------- MAIN LOGIC ----------------
 rss_videos = []
 
 # 1. Gather all videos from RSS
+print("\n---------------- STARTING RSS FETCH ----------------")
 for channel_id in CHANNEL_IDS:
-    print(f"\n🔍 Fetching channel: {channel_id}")
+    print(f"🔍 Fetching channel: {channel_id}")
     videos = fetch_videos_from_channel(channel_id)
     total_fetched += len(videos)
     rss_videos.extend(videos)
@@ -222,7 +274,7 @@ live_candidates = [v for v in candidates if v["video_id"] in active_live_ids]
 total_skipped_not_live = len(candidates) - len(live_candidates)
 
 if not live_candidates:
-    print("✅ No active live streams found right now.")
+    print("✅ No new active live streams found right now.")
     sys.exit(0)
 
 # 4. Insert Final Live Streams into Respective DBs
@@ -297,6 +349,7 @@ if new_ids_harmandir:
 
 # ---------------- SUMMARY ----------------
 print("\n================ SUMMARY ================")
+print(f"🗑️  Stale Streams Deleted   : Gurbani: {total_deleted_gurbani} | Harmandir: {total_deleted_harmandir}")
 print(f"📥 Total RSS Fetched        : {total_fetched}")
 print(f"⏭️  Skipped (Already in DB) : {total_skipped_existing}")
 print(f"🗑️  Skipped (Normal Videos) : {total_skipped_not_live}")
