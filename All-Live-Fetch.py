@@ -24,10 +24,7 @@ CHANNEL_IDS = [
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
 EXCLUDED_KEYWORDS = [
-    "antim ardaas", "samagam", "semagam", "promo", "mela",
-    "nagar kirtan", "teaser", "chaupai", "japji", "sukhmani",
-    "rehras", "ardaas", "ardas", "bhog", "bhogg", "akhand",
-    "asa ki vaar", "sohila sahib", "sohela sahib",
+    "antim ardaas", "bhog", "bhogg",
 ]
 
 # Database Configurations (Updated to target live streams)
@@ -193,6 +190,7 @@ total_fetched = 0
 total_skipped_existing = 0
 total_skipped_not_live = 0
 total_skipped_keywords = 0
+total_skipped_duplicate_titles = 0
 total_inserted_gurbani = 0
 total_inserted_harmandir = 0
 new_ids_gurbani = []
@@ -277,6 +275,24 @@ if not live_candidates:
     print("✅ No new active live streams found right now.")
     sys.exit(0)
 
+# 3.5 Deduplicate by EXACT title match before inserting
+unique_live_candidates = []
+seen_titles = set()
+
+for v in live_candidates:
+    if v["title"] in seen_titles:
+        print(f"👯 Skipped Duplicate Title: {v['title'][:40]}...")
+        total_skipped_duplicate_titles += 1
+    else:
+        seen_titles.add(v["title"])
+        unique_live_candidates.append(v)
+
+live_candidates = unique_live_candidates
+
+if not live_candidates:
+    print("✅ No unique active live streams found right now.")
+    sys.exit(0)
+
 # 4. Insert Final Live Streams into Respective DBs
 print("\n🚀 Starting Final Filtering & Firebase Insertion...")
 for v in live_candidates:
@@ -354,6 +370,7 @@ print(f"📥 Total RSS Fetched        : {total_fetched}")
 print(f"⏭️  Skipped (Already in DB) : {total_skipped_existing}")
 print(f"🗑️  Skipped (Normal Videos) : {total_skipped_not_live}")
 print(f"🛑 Skipped (Keywords)       : {total_skipped_keywords}")
+print(f"👯 Skipped (Duplicate Title): {total_skipped_duplicate_titles}")
 print(f"➕ Inserted to Gurbani     : {total_inserted_gurbani} (Total Live: {len(existing_ids_gurbani)})")
 print(f"➕ Inserted to Harmandir   : {total_inserted_harmandir} (Total Live: {len(existing_ids_harmandir)})")
 print("========================================")
