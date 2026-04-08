@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+import firebase_admin
+from firebase_admin import credentials, firestore
+import json
+import os
+import sys
+import time
+import re
+
+# ---------------- CONFIG ----------------
+CHANNEL_IDS = [
+    "UC884UDwNldmpdEiS1mgtijA",
+    "UC_JnnWTC6gHc59JwfMPTjdw",
+    "UCQroafhIKCxeQ0e9jj-O51Q",
+    "UC71aJD7c8-FWf-nJ7ug2sfg",
+    "UCUjIneSnBylQOqAk7n7i33A",
+    "UC1wecYlMxn33DPHrhHHUyVw",
+    "UCh0LDn5Drt44tITPoQiiJ6Q",
+    "UCBe8nwY2SqWlrGKKcmxB0_w",
+]
+
+# 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
+EXCLUDED_KEYWORDS = [
+    "antim ardaas", "samagam", "semagam", "promo", "mela",
+    "nagar kirtan", "teaser", "chaupai", "japji", "sukhmani",
+    "rehras", "ardaas", "ardas", "bhog", "bhogg", "akhand",
+    "asa ki vaar", "sohila sahib", "sohela sahib",
+]
+
+# Database Configurations (Updated to target live streams)
+COLLECTION_NAME = "liveStreams_More"
+ALL_IDS_DOC = "-All_Live_Videos_Id"  # Changed to avoid mixing with normal video IDs
+
+# Env variables for BOTH service accounts
+SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
+SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
+
+if not SERVICE_ACCOUNT_GURBANI or not SERVICE_ACCOUNT_HARMANDIR:
+    print("❌ FIREBASE_SERVICE_ACCOUNT env vars missing for one or both apps")
+    sys.exit(1)
+
+if not YOUTUBE_API_KEY:
+    print("❌ YOUTUBE_API_KEY env var missing")
+    sys.exit(1)
+
+NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "yt": "http://www.youtube.com/xml/schemas/2015"
+}
+
+# ---------------- FIREBASE DUAL INIT ----------------
+print("🔌 Initializing Firebase Connections...")
+
+# App 1: Gurbani
+cred_gurbani = credentials.Certificate(json.loads(SERVICE_ACCOUNT_GURBANI))
+app_gurbani = firebase_admin.initialize_app(cred_gurbani, name='gurbani_app')
+db_gurbani = firestore.client(app=app_gurbani)
+
+# App 2: Harmandir Sahib
+cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
+app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
+db_harmandir = firestore.client(app=app_harmandir)
+
+# ---------------- READ EXISTING IDS (2 READS) ----------------
+print(f"📖 Fetching existing Video IDs from {COLLECTION_NAME}...")
+
+# Read Gurbani DB
+doc_gurbani = db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
+existing_ids_gurbani = set(doc_gurbani.to_dict().get("video_id", [])) if doc_gurbani.exists else set()
+
+# Read Harmandir DB
+doc_harmandir = db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
+existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc_harmandir.exists else set()
+
+print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
+print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
+
+# ---------------- COUNTERS ----------------
+total_fetched = 0
+total_skipped_existing = 0
+total_skipped_not_live = 0
+total_skipped_keywords = 0
+total_inserted_gurbani = 0
+total_inserted_harmandir = 0
+new_ids_gurbani = []
+new_ids_harmandir = []
+
+# ---------------- RSS FETCH ----------------
+def fetch_videos_from_channel(channel_id):
+    url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"⚠️ Error fetching channel {channel_id}: {e}")
+        return []
+
+    root = ET.fromstring(response.text)
+    videos = []
+    entries = root.findall("atom:entry", NS)
+    
+    for entry in entries:
+        title_el = entry.find("atom:title", NS)
+        video_id_el = entry.find("yt:videoId", NS)
+        published_el = entry.find("atom:published", NS)
+
+        if title_el is None or video_id_el is None or published_el is None:
+            continue
+
+        published_dt = datetime.fromisoformat(
+            published_el.text.replace("Z", "+00:00")
+        ).astimezone(timezone.utc)
+
+        video_id = video_id_el.text.strip()
+
+        videos.append({
+            "video_id": video_id,
+            "title": title_el.text.strip(),
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
+            "published": published_dt
+        })
+    return videos
+
+# ---------------- HELPER METHODS ----------------
+def chunk_list(data, chunk_size):
+    for i in range(0, len(data), chunk_size):
+        yield data[i:i + chunk_size]
+
+def get_ONLY_live_streams_batch(video_ids):
+    active_live_ids = set()
+    CHUNK_SIZE = 50 
+    
+    for chunk in chunk_list(video_ids, CHUNK_SIZE):
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "snippet",
+            "id": ",".join(chunk),
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 50
+        }
+        try:
+            r = requests.get(url, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            for item in data.get("items", []):
+                vid = item["id"]
+                broadcast_content = item["snippet"].get("liveBroadcastContent", "none")
+                
+                # ONLY grab videos that are actively "live"
+                if broadcast_content == "live":
+                    active_live_ids.add(vid)
+                    print(f"🔴 Detected Active LIVE stream: {vid}")
+        except Exception as e:
+            print(f"⚠️ Error checking live status: {e}")
+    return active_live_ids
+
+def get_working_image_url(video_id):
+    maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+    fallback_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault_live.jpg"
+    try:
+        response = requests.head(maxres_url, timeout=5)
+        if response.status_code == 200:
+            return maxres_url
+    except Exception:
+        pass
+    return fallback_url
+
+def generate_search_keywords(title):
+    if not isinstance(title, str): return []
+    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
+    keywords = set()
+    for word in words:
+        word = word.strip()
+        if len(word) > 0:
+            prefix = ""
+            for char in word:
+                prefix += char
+                if prefix.strip():
+                    keywords.add(prefix)
+    return list(keywords)
+
+# ---------------- MAIN LOGIC ----------------
+rss_videos = []
+
+# 1. Gather all videos from RSS
+for channel_id in CHANNEL_IDS:
+    print(f"\n🔍 Fetching channel: {channel_id}")
+    videos = fetch_videos_from_channel(channel_id)
+    total_fetched += len(videos)
+    rss_videos.extend(videos)
+
+# 2. Filter out Existing IDs 
+candidates = []
+for v in rss_videos:
+    vid = v["video_id"]
+    if vid in existing_ids_gurbani and vid in existing_ids_harmandir:
+        total_skipped_existing += 1
+        continue
+    if any(c["video_id"] == vid for c in candidates):
+        continue
+    candidates.append(v)
+
+print(f"\n📝 Candidates needing processing (missing in at least one DB): {len(candidates)}")
+
+if not candidates:
+    print("✅ No new videos to process for either database.")
+    sys.exit(0)
+
+candidate_ids = [v["video_id"] for v in candidates]
+
+# 3. Check Live Status (API Call)
+print("\n📡 Checking Live status (Filtering OUT normal videos)...")
+active_live_ids = get_ONLY_live_streams_batch(candidate_ids)
+
+# Keep ONLY the candidates that are currently LIVE
+live_candidates = [v for v in candidates if v["video_id"] in active_live_ids]
+total_skipped_not_live = len(candidates) - len(live_candidates)
+
+if not live_candidates:
+    print("✅ No active live streams found right now.")
+    sys.exit(0)
+
+# 4. Insert Final Live Streams into Respective DBs
+print("\n🚀 Starting Final Filtering & Firebase Insertion...")
+for v in live_candidates:
+    vid = v["video_id"]
+    title = v["title"]
+    
+    # --- FILTER 1: Title Keywords ---
+    found_keyword = False
+    for keyword in EXCLUDED_KEYWORDS:
+        pattern = r"\b" + re.escape(keyword) + r"\b"
+        if re.search(pattern, title, re.IGNORECASE):
+            found_keyword = True
+            print(f"🛑 Skipped (Keyword '{keyword}'): {title[:40]}...")
+            break
+            
+    if found_keyword:
+        total_skipped_keywords += 1
+        continue
+
+    # --- PREPARE DATABASE DOCUMENT (Shared by both) ---
+    final_image_url = get_working_image_url(vid)
+    base_doc_data = {
+        "title": v["title"],
+        "titleLowercase": v["title"].lower(),
+        "url": v["url"],
+        "imageUrl": final_image_url,
+        "timestamp": str(int(time.time() * 1000)),
+        "isLive": True # Explicitly flag it as live
+    }
+
+    inserted_any = False
+
+    # Insert into Gurbani App DB (WITH searchKeywords)
+    if vid not in existing_ids_gurbani:
+        gurbani_doc_data = base_doc_data.copy()
+        gurbani_doc_data["searchKeywords"] = generate_search_keywords(v["title"])
+        
+        db_gurbani.collection(COLLECTION_NAME).document().set(gurbani_doc_data)
+        existing_ids_gurbani.add(vid)
+        new_ids_gurbani.append(vid)
+        total_inserted_gurbani += 1
+        inserted_any = True
+
+    # Insert into Harmandir Sahib App DB (WITHOUT searchKeywords)
+    if vid not in existing_ids_harmandir:
+        db_harmandir.collection(COLLECTION_NAME).document().set(base_doc_data)
+        existing_ids_harmandir.add(vid)
+        new_ids_harmandir.append(vid)
+        total_inserted_harmandir += 1
+        inserted_any = True
+
+    if inserted_any:
+        print(f"➕ Inserted LIVE STREAM: {vid} - {title[:30]}...")
+        time.sleep(0.03)
+
+# ---------------- UPDATE ID INDEXES ----------------
+if new_ids_gurbani:
+    print(f"\n💾 Updating {ALL_IDS_DOC} index for Gurbani App...")
+    db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
+        "video_id": list(existing_ids_gurbani),
+        "total_count": len(existing_ids_gurbani)
+    }, merge=True)
+
+if new_ids_harmandir:
+    print(f"💾 Updating {ALL_IDS_DOC} index for Harmandir App...")
+    db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
+        "video_id": list(existing_ids_harmandir),
+        "total_count": len(existing_ids_harmandir)
+    }, merge=True)
+
+# ---------------- SUMMARY ----------------
+print("\n================ SUMMARY ================")
+print(f"📥 Total RSS Fetched        : {total_fetched}")
+print(f"⏭️  Skipped (Already in DB) : {total_skipped_existing}")
+print(f"🗑️  Skipped (Normal Videos) : {total_skipped_not_live}")
+print(f"🛑 Skipped (Keywords)       : {total_skipped_keywords}")
+print(f"➕ Inserted to Gurbani     : {total_inserted_gurbani} (Total Live: {len(existing_ids_gurbani)})")
+print(f"➕ Inserted to Harmandir   : {total_inserted_harmandir} (Total Live: {len(existing_ids_harmandir)})")
+print("========================================")
