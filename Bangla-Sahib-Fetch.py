@@ -46,9 +46,17 @@ app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_ap
 db_harmandir = firestore.client(app=app_harmandir)
 
 # ---------------- 1. RSS FETCH ----------------
+# ---------------- 1. RSS FETCH ----------------
 def fetch_latest_5_matching():
-    response = requests.get(RSS_URL, timeout=15)
+    # 🚨 ADD THIS: YouTube को यह न लगे कि कोई बॉट है!
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
+    # Pass the headers into the request
+    response = requests.get(RSS_URL, headers=headers, timeout=15)
     response.raise_for_status()
+    
     root = ET.fromstring(response.text)
     matches = []
 
