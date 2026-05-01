@@ -181,7 +181,6 @@ def build_video_payload(rss_videos, yt_videos):
     duration_str = "00:00" if is_live else parse_duration(content.get("duration", ""))
     
     # Timestamps in milliseconds (Strings)
-    current_time_ms = str(int(datetime.now(timezone.utc).timestamp() * 1000))
     published_time_ms = str(int(published_dt.timestamp() * 1000))
 
     # Fetch Logo via Scraper
@@ -190,7 +189,6 @@ def build_video_payload(rss_videos, yt_videos):
     return {
         "imageUrl": get_working_image_url(final_yt['id']), # String
         "isLive": is_live,                                 # Boolean
-        "timestamp": current_time_ms,                      # String (Update time)
         "title": snippet.get("title", ""),                 # String
         "url": f"https://www.youtube.com/watch?v={final_yt['id']}", # String
         
