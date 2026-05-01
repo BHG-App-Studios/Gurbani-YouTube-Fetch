@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import re
 import requests
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
@@ -11,119 +10,70 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
+# Using the exact Channel ID from your requested output
 CHANNEL_ID = "UCudVHqnOekwcvpzNpY8_ERw"
 RSS_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
-# Env variables for BOTH service accounts & YouTube API
+# Env variables for BOTH service accounts
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
-YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 
 if not SERVICE_ACCOUNT_GURBANI or not SERVICE_ACCOUNT_HARMANDIR:
     print("❌ FIREBASE_SERVICE_ACCOUNT env vars missing for one or both apps")
-    sys.exit(1)
-
-if not YOUTUBE_API_KEY:
-    print("❌ YOUTUBE_API_KEY env var missing")
     sys.exit(1)
 
 # Collection Names
 COLLECTION_GURBANI = "liveStreams"
 COLLECTION_HARMANDIR = "Live-Gurdwaras-YouTube"
 
+# Important: Added "media" namespace to fetch views from RSS
 NS = {
     "atom": "http://www.w3.org/2005/Atom",
-    "yt": "http://www.youtube.com/xml/schemas/2015"
+    "yt": "http://www.youtube.com/xml/schemas/2015",
+    "media": "http://search.yahoo.com/mrss/"
 }
 
 # ---------------- FIREBASE DUAL INIT ----------------
 print("🔌 Initializing Firebase Connections...")
 
-# App 1: Gurbani
 cred_gurbani = credentials.Certificate(json.loads(SERVICE_ACCOUNT_GURBANI))
 app_gurbani = firebase_admin.initialize_app(cred_gurbani, name='gurbani_app')
 db_gurbani = firestore.client(app=app_gurbani)
 
-# App 2: Harmandir Sahib
 cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
 app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
 db_harmandir = firestore.client(app=app_harmandir)
 
-
-# ---------------- HELPER: SCRAPE CHANNEL LOGO ----------------
+# ---------------- SCRAPING HELPERS ----------------
 def fetch_channel_logo(channel_id):
     channel_url = f"https://www.youtube.com/channel/{channel_id}"
-    print(f"🖼️ Scraping Logo from: {channel_url}...")
-    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9'
     }
-    
     try:
         response = requests.get(channel_url, headers=headers, timeout=15)
         response.raise_for_status()
-        
         soup = BeautifulSoup(response.text, 'html.parser')
         meta_image = soup.find('meta', property='og:image')
         
         if meta_image and meta_image.get('content'):
-            print(f"✅ Logo found: {meta_image['content']}")
             return meta_image['content']
-        else:
-            print("❌ Logo meta tag not found.")
-            return ""
     except Exception as e:
         print(f"❌ Error scraping logo: {e}")
-        return ""
-
-
-# ---------------- HELPER FUNCTIONS: DURATION & IMAGES ----------------
-def parse_duration(pt_str):
-    """Converts YouTube 'PT2M55S' format to '02:55' string for database"""
-    if not pt_str or pt_str == "P0D": return "00:00"
-    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', pt_str)
-    if not match: return "00:00"
-    h, m, s = [int(x) if x else 0 for x in match.groups()]
-    if h > 0: return f"{h}:{m:02d}:{s:02d}"
-    return f"{m}:{s:02d}"
+    return ""
 
 def get_working_image_url(video_id):
     maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
     fallback_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault_live.jpg"
-    
     try:
-        response = requests.head(maxres_url, timeout=5)
-        if response.status_code == 200:
+        if requests.head(maxres_url, timeout=5).status_code == 200:
             return maxres_url
     except Exception:
-        pass 
-        
+        pass
     return fallback_url
 
-
-# ---------------- API HELPER: FETCH FULL VIDEO DETAILS ----------------
-def fetch_video_details(video_id):
-    """Fetches details (snippet, stats, duration) for a single video ID"""
-    url = "https://www.googleapis.com/youtube/v3/videos"
-    params = {
-        "part": "snippet,contentDetails,statistics,liveStreamingDetails",
-        "id": video_id,
-        "key": YOUTUBE_API_KEY
-    }
-    try:
-        r = requests.get(url, params=params, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-        items = data.get("items", [])
-        if items:
-            return items[0]
-    except Exception as e:
-        print(f"⚠️ Error fetching details: {e}")
-    return None
-
-
-# ---------------- MAIN LOGIC: RSS FETCH & FILTER ----------------
+# ---------------- RSS FETCH (NO API REQUIRED) ----------------
 def fetch_latest_stream():
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -138,13 +88,15 @@ def fetch_latest_stream():
         title_el = entry.find("atom:title", NS)
         video_id_el = entry.find("yt:videoId", NS)
         published_el = entry.find("atom:published", NS)
+        author_name_el = entry.find("atom:author/atom:name", NS)
+        stats_el = entry.find("media:group/media:community/media:statistics", NS)
 
         if title_el is None or video_id_el is None or published_el is None:
             continue
 
         title = title_el.text.strip()
 
-        # ✅ ORIGINAL LOGIC FILTER: Official SGPC LIVE | Katha Hukamnama Sahib ONLY
+        # ✅ FILTER: Official SGPC LIVE | Katha Hukamnama Sahib ONLY
         if "Official SGPC LIVE | Katha Hukamnama Sahib" not in title:
             continue
 
@@ -152,74 +104,56 @@ def fetch_latest_stream():
             published_el.text.replace("Z", "+00:00")
         ).astimezone(timezone.utc)
 
+        # Extract views from RSS
+        view_count = int(stats_el.attrib.get("views", 0)) if stats_el is not None else 0
+        channel_name = author_name_el.text if author_name_el is not None else ""
+
         matches.append({
             "video_id": video_id_el.text.strip(),
             "title": title,
-            "published": published
+            "published": published,
+            "viewCount": view_count,
+            "channelName": channel_name
         })
 
     if not matches:
         return None
 
-    # ✅ LATEST ONLY (Matches your original script logic exactly)
+    # Get the newest video
     latest = max(matches, key=lambda x: x["published"])
-    vid = latest["video_id"]
-
-    print(f"📡 Fetching YouTube API details for: {vid}")
-    latest_yt_data = fetch_video_details(vid)
-
-    if not latest_yt_data:
-        print("❌ Failed to fetch video details from YouTube API")
-        return None
-
-    # --- BUILD FINAL PAYLOAD WITH ALL METADATA ---
-    snippet = latest_yt_data.get("snippet", {})
-    stats = latest_yt_data.get("statistics", {})
-    content = latest_yt_data.get("contentDetails", {})
     
-    is_live = snippet.get("liveBroadcastContent") == "live"
-    view_count = int(stats.get("viewCount", 0))
-    duration_str = "00:00" if is_live else parse_duration(content.get("duration", ""))
+    # Process Timestamps
+    time_ago_ms = str(int(latest["published"].timestamp() * 1000))
+    current_timestamp_ms = str(int(datetime.now(timezone.utc).timestamp() * 1000))
     
-    # Timestamps in milliseconds 
-    published_time_ms = str(int(latest["published"].timestamp() * 1000))
-    current_time_ms = str(int(datetime.now(timezone.utc).timestamp() * 1000))
-    
-    # Fetch Logo via Scraper
-    fetched_channel_id = snippet.get("channelId", CHANNEL_ID)
-    logo_url = fetch_channel_logo(fetched_channel_id)
+    logo_url = fetch_channel_logo(CHANNEL_ID)
 
+    # Build exact requested output
     return {
+        "channelName": latest["channelName"],
         "channelLogoUrl": logo_url,
-        "channelName": snippet.get("channelTitle", ""),
-        "channel_id": fetched_channel_id,
-        "duration": duration_str,
-        "imageUrl": get_working_image_url(vid),
-        "isLive": is_live,
-        "timeAgo": published_time_ms,
-        "timestamp": current_time_ms,
-        "title": snippet.get("title", latest["title"]),
-        "url": f"https://www.youtube.com/watch?v={vid}",
-        "viewCount": view_count
+        "channel_id": CHANNEL_ID,
+        "duration": "00:00", # RSS does not provide duration, defaulting to 00:00
+        "hukamnama": CHANNEL_ID,
+        "imageUrl": get_working_image_url(latest['video_id']),
+        "isLive": False, # Assuming false as requested in output schema
+        "timeAgo": time_ago_ms,
+        "timestamp": current_timestamp_ms,
+        "title": latest["title"],
+        "url": f"https://www.youtube.com/watch?v={latest['video_id']}",
+        "viewCount": latest["viewCount"]
     }
 
-
-# ---------------- FIRESTORE UPDATE DUAL DATABASES ----------------
+# ---------------- FIRESTORE SAFE UPDATE ----------------
 def update_firestore_dual(data):
     print("\n📝 Updating Databases...")
     
-    # --- Prepare Data for Gurbani App (ALL FIELDS) ---
-    gurbani_update_payload = data.copy()
+    harmandir_payload = data.copy()
+    harmandir_payload["titleLowercase"] = data["title"].lower()
 
-    # --- Prepare Data for Harmandir Sahib App (ALL FIELDS + lowercase title) ---
-    harmandir_update_payload = data.copy()
-    harmandir_update_payload["titleLowercase"] = data["title"].lower()
-
-    # helper function to execute update
     def do_update(db_client, collection_name, app_name, payload):
         docs = (
             db_client.collection(collection_name)
-            # ❗ ORIGINAL LOGIC: Query by 'hukamnama_katha_fatehgarh_sahib' field
             .where(filter=FieldFilter("hukamnama_katha_fatehgarh_sahib", "==", CHANNEL_ID))
             .limit(1)
             .get()
@@ -232,24 +166,25 @@ def update_firestore_dual(data):
         doc = docs[0]
         existing = doc.to_dict()
 
-        # 🔒 CHANGE-DETECTION
-        if existing.get("url") == payload["url"]:
-            print(f"⏭ No change in URL detected for {app_name}. Skipping update.")
+        # 🔒 SAFTEY CHECK: Compare views, url, and title to save Firebase Writes
+        url_matches = existing.get("url") == payload["url"]
+        views_match = existing.get("viewCount") == payload["viewCount"]
+        title_matches = existing.get("title") == payload["title"]
+
+        if url_matches and views_match and title_matches:
+            print(f"⏭ No data changed for {app_name} (Views still {payload['viewCount']}). Skipping write to save limits.")
             return
 
-        # ✅ UPDATE ONLY IF CHANGED
+        # ✅ Update only if something changed
         doc.reference.update(payload)
-        print(f"✅ {app_name} updated successfully with full metadata")
+        print(f"✅ {app_name} updated successfully with {payload['viewCount']} views!")
 
-    # Run for Gurbani
-    do_update(db_gurbani, COLLECTION_GURBANI, "Gurbani App", gurbani_update_payload)
-    
-    # Run for Harmandir Sahib
-    do_update(db_harmandir, COLLECTION_HARMANDIR, "Harmandir App", harmandir_update_payload)
-
+    do_update(db_gurbani, COLLECTION_GURBANI, "Gurbani App", data)
+    do_update(db_harmandir, COLLECTION_HARMANDIR, "Harmandir App", harmandir_payload)
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
+    print("🔄 Fetching latest stream data from RSS (Zero API Quota)...")
     result = fetch_latest_stream()
 
     if not result:
