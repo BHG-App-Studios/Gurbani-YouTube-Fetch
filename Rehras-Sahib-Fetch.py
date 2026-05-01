@@ -211,7 +211,7 @@ def update_firestore_dual(payload):
     def do_update(db_client, collection_name, app_name, data):
         docs = (
             db_client.collection(collection_name)
-            .where(filter=FieldFilter("channel_Id", "==", CHANNEL_ID)) # Assuming channel_Id is the linking key
+            .where(filter=FieldFilter("channel_id", "==", CHANNEL_ID)) # Assuming channel_Id is the linking key
             .limit(1)
             .get()
         )
