@@ -11,7 +11,9 @@ from google.cloud.firestore_v1 import FieldFilter
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCudVHqnOekwcvpzNpY8_ERw"
 TARGET_TITLE_FILTER = "Official SGPC LIVE | Katha Hukamnama Sahib"
-FIRESTORE_FIELD = "hukamnama_katha_fatehgarh"
+FIRESTORE_FIELD = "hukamnama_katha_fatehgarh_sahib"
+
+WHERE_TO_FETCH = "streams"
 
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
@@ -74,7 +76,7 @@ def parse_time_text_to_ms(time_text):
 
 def fetch_channel_data_from_source(channel_id):
     """
-    Scrapes the page and extracts ALL data from ytInitialData.
+    Scrapes the /videos page and extracts ALL data from ytInitialData.
     Cost: 0 API Quota. 1 Request.
     """
     
