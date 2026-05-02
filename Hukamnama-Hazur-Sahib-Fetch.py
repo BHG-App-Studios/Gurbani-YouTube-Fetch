@@ -48,7 +48,7 @@ def get_working_image_url(video_id):
     return fallback_url
 
 def parse_time_text_to_ms(time_text):
-    """Converts YouTube 'Streamed X hours ago' text into a Unix Timestamp in milliseconds."""
+    """Converts YouTube 'X hours ago' text into a Unix Timestamp in milliseconds."""
     now = datetime.now(timezone.utc)
     if not time_text:
         return int(now.timestamp() * 1000)
@@ -74,10 +74,11 @@ def parse_time_text_to_ms(time_text):
 
 def fetch_channel_data_from_source(channel_id):
     """
-    Scrapes the /streams page and extracts ALL data from ytInitialData.
+    Scrapes the /videos page and extracts ALL data from ytInitialData.
     Cost: 0 API Quota. 1 Request.
     """
-    url = f"https://www.youtube.com/channel/{channel_id}/streams"
+    # ✅ CHANGED: Now targeting /videos instead of /streams
+    url = f"https://www.youtube.com/channel/{channel_id}/videos"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9'
@@ -121,7 +122,7 @@ def fetch_channel_data_from_source(channel_id):
         find_all_videos(data, matches)
         
         if not matches:
-            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the streams page.")
+            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the videos page.")
             return None
 
         # ✅ Guarantee we pick the absolutely newest/latest video mathematically
