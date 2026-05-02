@@ -2,24 +2,30 @@ import os
 import sys
 import json
 import re
+import time
+import random
 import requests
-from datetime import datetime, timedelta, timezone
+from bs4 import BeautifulSoup
+from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCudVHqnOekwcvpzNpY8_ERw"
-TARGET_TITLE_FILTER = "Official SGPC LIVE | Katha Hukamnama Sahib"
-FIRESTORE_FIELD = "hukamnama_katha_fatehgarh_sahib"
-
-WHERE_TO_FETCH = "streams"
+TARGET_TITLE = "Official SGPC LIVE | Katha Hukamnama Sahib"
+TARGET_DOC_ID = "hukamnama_katha_fatehgarh_sahib"
 
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 
 if not SERVICE_ACCOUNT_GURBANI or not SERVICE_ACCOUNT_HARMANDIR:
     print("❌ FIREBASE_SERVICE_ACCOUNT env vars missing for one or both apps")
+    sys.exit(1)
+
+if not YOUTUBE_API_KEY:
+    print("❌ YOUTUBE_API_KEY env var missing.")
     sys.exit(1)
 
 # Collection Names
@@ -38,8 +44,26 @@ app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_ap
 db_harmandir = firestore.client(app=app_harmandir)
 
 
-# ---------------- HTML SCRAPING & PARSING HELPERS ----------------
+# ---------------- HELPERS ----------------
+def fetch_channel_logo(channel_id):
+    """Scrapes the channel HTML for the logo (Does not trigger API quota)."""
+    channel_url = f"https://www.youtube.com/channel/{channel_id}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    try:
+        response = requests.get(channel_url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        meta_image = soup.find('meta', property='og:image')
+        if meta_image and meta_image.get('content'):
+            return meta_image['content']
+    except Exception as e:
+        print(f"❌ Error scraping logo: {e}")
+    return ""
+
 def get_working_image_url(video_id):
+    """Checks if maxres is available, otherwise falls back to hqdefault."""
     maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
     fallback_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault_live.jpg"
     try:
@@ -49,193 +73,136 @@ def get_working_image_url(video_id):
         pass
     return fallback_url
 
-def parse_time_text_to_ms(time_text):
-    """Converts YouTube 'X hours ago' text into a Unix Timestamp in milliseconds."""
-    now = datetime.now(timezone.utc)
-    if not time_text:
-        return int(now.timestamp() * 1000)
+def parse_iso_duration(duration_iso):
+    """Converts ISO 8601 duration (e.g., PT8M33S) to MM:SS format."""
+    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_iso)
+    if not match: 
+        return "0:00"
         
-    match = re.search(r'(\d+)\s+(second|minute|hour|day|week|month|year)s?', time_text, re.IGNORECASE)
-    if not match:
-        return int(now.timestamp() * 1000)
-        
-    amount = int(match.group(1))
-    unit = match.group(2).lower()
+    hours, minutes, seconds = match.groups()
+    hours = int(hours) if hours else 0
+    minutes = int(minutes) if minutes else 0
+    seconds = int(seconds) if seconds else 0
     
-    if 'second' in unit: delta = timedelta(seconds=amount)
-    elif 'minute' in unit: delta = timedelta(minutes=amount)
-    elif 'hour' in unit: delta = timedelta(hours=amount)
-    elif 'day' in unit: delta = timedelta(days=amount)
-    elif 'week' in unit: delta = timedelta(weeks=amount)
-    elif 'month' in unit: delta = timedelta(days=amount * 30) # approximation
-    elif 'year' in unit: delta = timedelta(days=amount * 365) # approximation
-    else: delta = timedelta(0)
-        
-    published_time = now - delta
-    return int(published_time.timestamp() * 1000)
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    else:
+        return f"{minutes}:{seconds:02d}"
 
-def fetch_channel_data_from_source(channel_id):
-    """
-    Scrapes the targeted page and extracts ALL data from ytInitialData.
-    Cost: 0 API Quota. 1 Request.
-    """
-    url = f"https://www.youtube.com/channel/{channel_id}/{WHERE_TO_FETCH}"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cookie': 'CONSENT=YES+cb.20230501-14-p0.en+FX+038' # Bypasses YouTube consent blocks
-    }
+# ---------------- CORE API LOGIC (2 QUOTA UNITS TOTAL) ----------------
+def fetch_latest_api_data():
+    # Convert Channel ID (UC...) to Uploads Playlist ID (UU...)
+    playlist_id = "UU" + CHANNEL_ID[2:]
     
-    print(f"🔄 Scraping {url}")
+    # Unit 1: Fetch the 5 most recent uploads to find the specific stream
+    playlist_url = f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId={playlist_id}&maxResults=5&key={YOUTUBE_API_KEY}"
+    
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        html = response.text
+        resp1 = requests.get(playlist_url, timeout=10)
+        resp1.raise_for_status()
+        playlist_data = resp1.json()
         
-        # 1. Extract the JSON object
-        match = re.search(r'var ytInitialData = (\{.*?\});<\/script>', html)
-        if not match:
-            print("❌ Could not find ytInitialData in page source.")
+        target_video_id = None
+        published_at = None
+        channel_name = None
+        title = None
+        
+        for item in playlist_data.get("items", []):
+            snippet = item["snippet"]
+            # ✅ FILTER: Target Title ONLY
+            if TARGET_TITLE in snippet["title"]:
+                target_video_id = snippet["resourceId"]["videoId"]
+                title = snippet["title"]
+                published_at = snippet["publishedAt"]
+                channel_name = snippet["channelTitle"]
+                break
+                
+        if not target_video_id:
             return None
             
-        data = json.loads(match.group(1))
+        # Unit 2: Fetch both Statistics (views) and ContentDetails (duration) in one call!
+        video_url = f"https://www.googleapis.com/youtube/v3/videos?id={target_video_id}&part=statistics,contentDetails&key={YOUTUBE_API_KEY}"
+        resp2 = requests.get(video_url, timeout=10)
+        resp2.raise_for_status()
+        video_data = resp2.json()
         
-        # 2. Extract Channel Logo
-        logo_url = "https://yt3.googleusercontent.com/Dt394Emnx-gzw6Exnrx7RHwK4lp_Y0nJo7UvrqzX1ri8lPL_k1DgE79soW0U2cCQ3aosNq3m=s900-c-k-c0x00ffffff-no-rj"
-        try:
-            logo_url = data['metadata']['channelMetadataRenderer']['avatar']['thumbnails'][0]['url']
-        except Exception:
-            pass
+        view_count = 0
+        duration_formatted = "0:00"
         
-        matches = []
-
-        # 3. Recursive helper to find ALL matching videos regardless of YT layout changes
-        def find_all_videos(obj):
-            if isinstance(obj, dict):
-                # Format A: Classic videoRenderer
-                if 'videoRenderer' in obj:
-                    title = obj['videoRenderer'].get("title", {}).get("runs", [{}])[0].get("text", "")
-                    if title and TARGET_TITLE_FILTER.lower() in title.lower():
-                        vid_obj = obj['videoRenderer']
-                        vid_str = json.dumps(vid_obj)
-                        
-                        video_id = vid_obj.get("videoId", "")
-                        view_match = re.search(r'([0-9,KMB\.]+\s*views?)', vid_str, re.IGNORECASE)
-                        time_match = re.search(r'(Streamed\s+\d+\s+\w+\s+ago|\d+\s+\w+\s+ago)', vid_str, re.IGNORECASE)
-                        dur_match = re.search(r'"(?:simpleText|content)"\s*:\s*"(\d{1,2}:\d{2}(?::\d{2})?)"', vid_str)
-                        
-                        matches.append({
-                            "title": title,
-                            "videoId": video_id,
-                            "viewText": view_match.group(1) if view_match else "0",
-                            "timeText": time_match.group(1) if time_match else "",
-                            "duration": dur_match.group(1) if dur_match else "00:00"
-                        })
-                        
-                # Format B: New lockupViewModel
-                elif 'lockupViewModel' in obj:
-                    title = obj['lockupViewModel'].get('metadata', {}).get('lockupMetadataViewModel', {}).get('title', {}).get('content', '')
-                    if title and TARGET_TITLE_FILTER.lower() in title.lower():
-                        lockup_obj = obj['lockupViewModel']
-                        lockup_str = json.dumps(lockup_obj)
-                        
-                        video_id = lockup_obj.get('contentId', '')
-                        if not video_id:
-                            try:
-                                video_id = lockup_obj['onTap']['innertubeCommand']['watchEndpoint']['videoId']
-                            except Exception:
-                                pass
-                        
-                        view_match = re.search(r'([0-9,KMB\.]+\s*views?)', lockup_str, re.IGNORECASE)
-                        time_match = re.search(r'(Streamed\s+\d+\s+\w+\s+ago|\d+\s+\w+\s+ago)', lockup_str, re.IGNORECASE)
-                        dur_match = re.search(r'"(?:simpleText|content)"\s*:\s*"(\d{1,2}:\d{2}(?::\d{2})?)"', lockup_str)
-                        
-                        matches.append({
-                            "title": title,
-                            "videoId": video_id,
-                            "viewText": view_match.group(1) if view_match else "0",
-                            "timeText": time_match.group(1) if time_match else "",
-                            "duration": dur_match.group(1) if dur_match else "00:00"
-                        })
-
-                for k, v in obj.items():
-                    find_all_videos(v)
-            elif isinstance(obj, list):
-                for item in obj:
-                    find_all_videos(item)
-                    
-        find_all_videos(data)
-        
-        if not matches:
-            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the {WHERE_TO_FETCH} page.")
-            return None
-
-        # ✅ Guarantee we pick the absolutely newest/latest video mathematically
-        target_video = max(
-            matches, 
-            key=lambda v: parse_time_text_to_ms(v.get("timeText", ""))
-        )
-
-        # 4. Extract target data
-        video_id = target_video["videoId"]
-        title = target_video["title"]
-        
-        # Views
-        view_text = target_video["viewText"]
-        view_count = int(re.sub(r'\D', '', view_text)) if view_text else 0
-        
-        # Duration
-        duration = target_video["duration"]
-        
-        # Timestamps
-        time_text = target_video["timeText"]
-        published_timestamp_ms = parse_time_text_to_ms(time_text)
-        current_timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        if video_data.get("items"):
+            item_data = video_data["items"][0]
+            view_count = int(item_data["statistics"].get("viewCount", 0))
+            duration_iso = item_data["contentDetails"].get("duration", "")
+            duration_formatted = parse_iso_duration(duration_iso)
 
         return {
-            "channelLogoUrl": logo_url.replace("s200", "s900").replace("s72", "s900"),
-            "channelName": "Gurdwara Sri Fatehgarh Sahib",
-            "duration": duration,
-            FIRESTORE_FIELD: CHANNEL_ID,
-            "imageUrl": get_working_image_url(video_id),
-            "isLive": False,
-            "timeAgo": str(published_timestamp_ms),  
-            "timestamp": str(current_timestamp_ms), 
+            "video_id": target_video_id,
             "title": title,
-            "url": f"https://www.youtube.com/watch?v={video_id}",
-            "viewCount": view_count
+            "published": datetime.fromisoformat(published_at.replace("Z", "+00:00")).astimezone(timezone.utc),
+            "viewCount": view_count,
+            "channelName": channel_name,
+            "duration": duration_formatted
         }
 
-    except Exception as e:
-        print(f"❌ Error scraping page source: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ API Error: {e}")
         return None
 
-
-# ---------------- FIRESTORE LOGIC ----------------
+# ---------------- MAIN SYNC PROCESS ----------------
 def process_and_update_firestore():
-    base_payload = fetch_channel_data_from_source(CHANNEL_ID)
+    # Add a slight jitter to make automated execution less predictable 
+    sleep_time = random.randint(1, 15)
+    print(f"⏳ Jitter delay: Waiting {sleep_time} seconds...")
+    time.sleep(sleep_time)
 
-    if not base_payload:
+    print("🔄 Fetching latest stream data from YouTube Data API (Cost: 2 Units)...")
+    latest_data = fetch_latest_api_data()
+
+    if not latest_data:
+        print(f"❌ No '{TARGET_TITLE}' video found.")
         return
 
-    # ---------------- 1. READ FIREBASE (Exactly 2 Reads) ----------------
-    print("\n🔍 Reading existing data from Firestore...")
+    video_id = latest_data["video_id"]
+    new_url = f"https://www.youtube.com/watch?v={video_id}"
+
+    # ---------------- 1. READ FIREBASE ----------------
+    print(f"\n🔍 Target Stream Found: {latest_data['title']} ({latest_data['viewCount']} views)")
+    print("🔍 Reading existing data from Firestore...")
     
+    # ✅ FILTER: Target Document ID
     gurbani_docs = db_gurbani.collection(COLLECTION_GURBANI).where(
-        filter=FieldFilter(FIRESTORE_FIELD, "==", CHANNEL_ID)
+        filter=FieldFilter(TARGET_DOC_ID, "==", CHANNEL_ID)
     ).limit(1).get()
     
     harmandir_docs = db_harmandir.collection(COLLECTION_HARMANDIR).where(
-        filter=FieldFilter(FIRESTORE_FIELD, "==", CHANNEL_ID)
+        filter=FieldFilter(TARGET_DOC_ID, "==", CHANNEL_ID)
     ).limit(1).get()
 
     gurbani_doc = gurbani_docs[0] if gurbani_docs else None
     harmandir_doc = harmandir_docs[0] if harmandir_docs else None
 
-    print("\n🎯 Final Payload Assembled:")
-    print(json.dumps(base_payload, indent=2))
+    # ---------------- 2. BUILD FINAL PAYLOAD ----------------
+    time_ago_ms = str(int(latest_data["published"].timestamp() * 1000))
+    current_timestamp_ms = str(int(datetime.now(timezone.utc).timestamp() * 1000))
+    logo_url = fetch_channel_logo(CHANNEL_ID)
 
-    # ---------------- 2. CONDITIONAL WRITE FIREBASE (Max 2 Writes) ----------------
+    base_payload = {
+        "channelLogoUrl": logo_url,
+        "channelName": latest_data["channelName"],
+        "channel_id": CHANNEL_ID,
+        "duration": latest_data["duration"],
+        "hukamnama": CHANNEL_ID,
+        TARGET_DOC_ID: CHANNEL_ID,  # ✅ Dynamic field injection
+        "imageUrl": get_working_image_url(video_id),
+        "isLive": False,
+        "timeAgo": time_ago_ms,
+        "timestamp": current_timestamp_ms,
+        "title": latest_data["title"],
+        "url": new_url,
+        "viewCount": latest_data["viewCount"]
+    }
+
+    # ---------------- 3. CONDITIONAL WRITE FIREBASE ----------------
     def safe_update(doc_snapshot, payload, app_name):
         if not doc_snapshot:
             print(f"❌ Document missing in {app_name}, cannot update.")
@@ -243,28 +210,23 @@ def process_and_update_firestore():
 
         existing = doc_snapshot.to_dict()
         
-        # Check if an update is genuinely needed
+        # Prevent unnecessary writes if nothing important changed
         if (existing.get("url") == payload["url"] and 
             existing.get("viewCount") == payload["viewCount"] and 
-            existing.get("title") == payload["title"] and
-            existing.get("duration") == payload["duration"]):
+            existing.get("title") == payload["title"]):
             print(f"⏭ No data changed for {app_name} (Views still {payload['viewCount']}). Write skipped.")
             return
 
         doc_snapshot.reference.update(payload)
-        print(f"✅ {app_name} updated successfully with {payload['viewCount']} views and duration {payload['duration']}!")
+        print(f"✅ {app_name} updated successfully!")
 
     print("\n📝 Pushing updates to Databases...")
     
-    # Gurbani Update
     safe_update(gurbani_doc, base_payload, "Gurbani App")
 
-    # Harmandir Update (Requires titleLowercase)
     harmandir_payload = base_payload.copy()
     harmandir_payload["titleLowercase"] = base_payload["title"].lower()
     safe_update(harmandir_doc, harmandir_payload, "Harmandir App")
 
-
-# ---------------- MAIN ----------------
 if __name__ == "__main__":
     process_and_update_firestore()
