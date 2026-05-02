@@ -17,6 +17,7 @@ TARGET_TITLE = "Today Hukamnama Sri Darbar Sahib"
 TARGET_DOC_ID = "hukamnama"
 MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes minimum to reject YouTube Shorts
 FETCH_LIMIT = 5             # 🔍 Number of recent uploads to check
+STATE_FILE_PATH = "more/last_fetched_harmandir.txt"  # Path for the state file
 
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
@@ -46,7 +47,57 @@ app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_ap
 db_harmandir = firestore.client(app=app_harmandir)
 
 
+# ---------------- STATE MANAGEMENT ----------------
+def get_last_processed_video_id():
+    """Reads the local state file to get the last processed video ID."""
+    if os.path.exists(STATE_FILE_PATH):
+        try:
+            with open(STATE_FILE_PATH, "r") as f:
+                data = json.load(f)
+                return data.get("video_id")
+        except Exception as e:
+            print(f"⚠️ Error reading state file: {e}")
+            return None
+    return None
+
+def save_processed_video_state(video_id, title, url, published_date):
+    """Saves the latest processed video info to the repo directory."""
+    os.makedirs(os.path.dirname(STATE_FILE_PATH), exist_ok=True)
+    data = {
+        "video_id": video_id,
+        "title": title,
+        "url": url,
+        "published_date": str(published_date),
+        "processed_at": str(datetime.now(timezone.utc))
+    }
+    try:
+        with open(STATE_FILE_PATH, "w") as f:
+            json.dump(data, f, indent=4)
+        print(f"📝 Successfully saved video state to {STATE_FILE_PATH}")
+    except Exception as e:
+        print(f"❌ Failed to save state file: {e}")
+
 # ---------------- HELPERS ----------------
+def get_latest_rss_video():
+    """Fetches the latest video ID from the free YouTube RSS feed."""
+    rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
+    try:
+        response = requests.get(rss_url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'xml')
+        
+        entries = soup.find_all('entry')
+        for entry in entries:
+            title_tag = entry.find('title')
+            if title_tag and TARGET_TITLE in title_tag.text:
+                video_id_tag = entry.find('yt:videoId')
+                if video_id_tag:
+                    return video_id_tag.text
+        return None
+    except Exception as e:
+        print(f"❌ RSS Fetch Error: {e}")
+        return None
+
 def fetch_channel_logo(channel_id):
     """Scrapes the channel HTML for the logo (Does not trigger API quota)."""
     channel_url = f"https://www.youtube.com/channel/{channel_id}"
@@ -173,6 +224,17 @@ def fetch_latest_api_data():
 
 # ---------------- MAIN SYNC PROCESS ----------------
 def process_and_update_firestore():
+    # 1. Pre-Check: Free RSS Feed vs Local State
+    last_processed_id = get_last_processed_video_id()
+    print("📡 Checking free RSS feed for latest uploads...")
+    rss_video_id = get_latest_rss_video()
+
+    if rss_video_id and rss_video_id == last_processed_id:
+        print(f"✅ Video {rss_video_id} is already saved in Firestore today. Exiting to save API Quota.")
+        return
+
+    print("🔄 New potential video detected! Proceeding with logic...")
+
     # Add a slight jitter to make automated execution less predictable 
     sleep_time = random.randint(1, 15)
     print(f"⏳ Jitter delay: Waiting {sleep_time} seconds...")
@@ -186,11 +248,17 @@ def process_and_update_firestore():
         return
 
     video_id = latest_data["video_id"]
+    
+    # Secondary check: If the API pulled an older valid video we already processed, safely exit.
+    if video_id == last_processed_id:
+        print(f"✅ The valid video found ({video_id}) is already processed. Exiting.")
+        return
+
     new_url = f"https://www.youtube.com/watch?v={video_id}"
 
     print(f"\n🔍 Target Stream Found: {latest_data['title']} ({latest_data['viewCount']} views, Duration: {latest_data['duration']})")
 
-    # ---------------- 1. BUILD FINAL PAYLOAD ----------------
+    # ---------------- 2. BUILD FINAL PAYLOAD ----------------
     time_ago_ms = str(int(latest_data["published"].timestamp() * 1000))
     current_timestamp_ms = str(int(datetime.now(timezone.utc).timestamp() * 1000))
     logo_url = fetch_channel_logo(CHANNEL_ID)
@@ -200,7 +268,6 @@ def process_and_update_firestore():
         "channelName": latest_data["channelName"],
         "channel_id": CHANNEL_ID,
         "duration": latest_data["duration"],
-        "hukamnama": CHANNEL_ID,
         TARGET_DOC_ID: CHANNEL_ID,  # ✅ Dynamic field injection
         "imageUrl": get_working_image_url(video_id),
         "isLive": False,
@@ -211,24 +278,30 @@ def process_and_update_firestore():
         "viewCount": latest_data["viewCount"]
     }
 
-    # ---------------- 2. CREATE NEW FIREBASE DOCUMENTS ----------------
+    # ---------------- 3. CREATE NEW FIREBASE DOCUMENTS ----------------
     def safe_create(collection_ref, payload, app_name):
         try:
             # .add() creates a brand new document with an auto-generated ID
             _, doc_ref = collection_ref.add(payload)
             print(f"✅ New document created in {app_name} successfully! (ID: {doc_ref.id})")
+            return True
         except Exception as e:
             print(f"❌ Failed to create document in {app_name}: {e}")
+            return False
 
     print("\n📝 Creating new documents in Databases...")
     
     # Create new document in Gurbani App 
-    safe_create(db_gurbani.collection(COLLECTION_GURBANI), base_payload, "Gurbani App")
+    gurbani_success = safe_create(db_gurbani.collection(COLLECTION_GURBANI), base_payload, "Gurbani App")
 
     # Create new document in Harmandir App
     harmandir_payload = base_payload.copy()
     harmandir_payload["titleLowercase"] = base_payload["title"].lower()
-    safe_create(db_harmandir.collection(COLLECTION_HARMANDIR), harmandir_payload, "Harmandir App")
+    harmandir_success = safe_create(db_harmandir.collection(COLLECTION_HARMANDIR), harmandir_payload, "Harmandir App")
+
+    # ---------------- 4. UPDATE LOCAL STATE ON SUCCESS ----------------
+    if gurbani_success or harmandir_success:
+        save_processed_video_state(video_id, latest_data["title"], new_url, latest_data["published"])
 
 if __name__ == "__main__":
     process_and_update_firestore()
