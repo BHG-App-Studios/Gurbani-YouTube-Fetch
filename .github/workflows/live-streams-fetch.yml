@@ -22,7 +22,12 @@ jobs:
           pip install requests firebase-admin google-cloud-firestore
           pip install requests firebase-admin beautifulsoup4
 
-          
+      - name: 🎵 Run All Youtube Videos Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python videos-fetch/All-Videos-Fetch.py
 
       - name: 🎵 Run All Live Youtube Videos Fetch
         env:
