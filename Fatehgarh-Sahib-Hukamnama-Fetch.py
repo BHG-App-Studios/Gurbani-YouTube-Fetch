@@ -151,7 +151,7 @@ def fetch_latest_api_data():
 # ---------------- MAIN SYNC PROCESS ----------------
 def process_and_update_firestore():
     # Add a slight jitter to make automated execution less predictable 
-    sleep_time = random.randint(1, 15)
+    sleep_time = random.randint(1, 5)
     print(f"⏳ Jitter delay: Waiting {sleep_time} seconds...")
     time.sleep(sleep_time)
 
