@@ -146,7 +146,9 @@ def fetch_latest_api_data():
         # Map the API response by video ID for easy lookup
         video_details = {item["id"]: item for item in video_data.get("items", [])}
         
-        # Loop through candidates in chronological order (newest first)
+        valid_videos = []
+
+        # Loop through candidates to parse valid videos (live OR passes duration check)
         for candidate in candidates:
             vid_id = candidate["video_id"]
             if vid_id not in video_details:
@@ -160,32 +162,62 @@ def fetch_latest_api_data():
             is_live = snippet.get("liveBroadcastContent") == "live"
             duration_iso = content.get("duration", "")
             
-            # ✅ FILTER: Target Title already matched. Now check if it's LIVE OR >= 3 Minutes
+            # ✅ FILTER: Check if it's LIVE OR >= 3 Minutes
             if is_live or get_total_seconds(duration_iso) >= MIN_DURATION_SECONDS:
-                view_count = int(stats.get("viewCount", 0))
-                duration_str = "00:00" if is_live else parse_iso_duration(duration_iso)
-                
-                # Parse published time to ms
-                published_dt = datetime.fromisoformat(candidate["published_at"].replace("Z", "+00:00")).astimezone(timezone.utc)
-                published_time_ms = str(int(published_dt.timestamp() * 1000))
+                valid_videos.append({
+                    "candidate": candidate,
+                    "snippet": snippet,
+                    "stats": stats,
+                    "is_live": is_live,
+                    "duration_iso": duration_iso,
+                    "vid_id": vid_id
+                })
 
-                # Scraping logo (0 Units)
-                logo_url = fetch_channel_logo(snippet.get("channelId", CHANNEL_ID))
+        if not valid_videos:
+            print(f"⚠️ Found matching titles, but they were not live AND shorter than {MIN_DURATION_SECONDS} seconds (Shorts rejected).")
+            return None
 
-                # Build exact requested payload
-                return {
-                    "isLive": is_live,                                   # Boolean
-                    "title": snippet.get("title", ""),                   # String
-                    "url": f"https://www.youtube.com/watch?v={vid_id}",  # String
-                    "channelName": snippet.get("channelTitle", ""),      # String
-                    "channelLogoUrl": logo_url,                          # String
-                    "viewCount": view_count,                             # Int64 (Number)
-                    "timeAgo": published_time_ms,                        # String (Publish time)
-                    "duration": duration_str                             # String
-                }
+        # ✅ PRIORITY LOGIC: Prefer Live over Latest VOD
+        selected_video = None
+        for v in valid_videos:
+            if v["is_live"]:
+                selected_video = v
+                print("📺 Live stream found! Prioritizing over VODs.")
+                break
+        
+        # Fallback to the latest valid video if no live streams are found
+        if not selected_video:
+            selected_video = valid_videos[0]
+            print("📼 No live stream currently active. Falling back to the latest valid VOD.")
 
-        print(f"⚠️ Found matching titles, but they were not live AND shorter than {MIN_DURATION_SECONDS} seconds (Shorts rejected).")
-        return None
+        # Build payload from selected video
+        snippet = selected_video["snippet"]
+        stats = selected_video["stats"]
+        is_live = selected_video["is_live"]
+        candidate = selected_video["candidate"]
+        vid_id = selected_video["vid_id"]
+        
+        view_count = int(stats.get("viewCount", 0))
+        duration_str = "00:00" if is_live else parse_iso_duration(selected_video["duration_iso"])
+        
+        # Parse published time to ms
+        published_dt = datetime.fromisoformat(candidate["published_at"].replace("Z", "+00:00")).astimezone(timezone.utc)
+        published_time_ms = str(int(published_dt.timestamp() * 1000))
+
+        # Scraping logo (0 Units)
+        logo_url = fetch_channel_logo(snippet.get("channelId", CHANNEL_ID))
+
+        # Build exact requested payload
+        return {
+            "isLive": is_live,                                   # Boolean
+            "title": snippet.get("title", ""),                   # String
+            "url": f"https://www.youtube.com/watch?v={vid_id}",  # String
+            "channelName": snippet.get("channelTitle", ""),      # String
+            "channelLogoUrl": logo_url,                          # String
+            "viewCount": view_count,                             # Int64 (Number)
+            "timeAgo": published_time_ms,                        # String (Publish time)
+            "duration": duration_str                             # String
+        }
 
     except requests.exceptions.RequestException as e:
         print(f"❌ API Error: {e}")
