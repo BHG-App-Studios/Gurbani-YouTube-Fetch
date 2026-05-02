@@ -122,7 +122,7 @@ def fetch_channel_data_from_source(channel_id):
                         video_id = vid_obj.get("videoId", "")
                         view_match = re.search(r'([0-9,KMB\.]+\s*views?)', vid_str, re.IGNORECASE)
                         time_match = re.search(r'(Streamed\s+\d+\s+\w+\s+ago|\d+\s+\w+\s+ago)', vid_str, re.IGNORECASE)
-                        dur_match = re.search(r'"simpleText":"(\d+:\d+(?::\d+)?)"', vid_str)
+                        dur_match = re.search(r'"(?:simpleText|content)"\s*:\s*"(\d{1,2}:\d{2}(?::\d{2})?)"', vid_str)
                         
                         matches.append({
                             "title": title,
@@ -132,7 +132,7 @@ def fetch_channel_data_from_source(channel_id):
                             "duration": dur_match.group(1) if dur_match else "00:00"
                         })
                         
-                # Format B: New lockupViewModel (From your screenshot)
+                # Format B: New lockupViewModel
                 elif 'lockupViewModel' in obj:
                     title = obj['lockupViewModel'].get('metadata', {}).get('lockupMetadataViewModel', {}).get('title', {}).get('content', '')
                     if title and TARGET_TITLE_FILTER.lower() in title.lower():
@@ -148,7 +148,7 @@ def fetch_channel_data_from_source(channel_id):
                         
                         view_match = re.search(r'([0-9,KMB\.]+\s*views?)', lockup_str, re.IGNORECASE)
                         time_match = re.search(r'(Streamed\s+\d+\s+\w+\s+ago|\d+\s+\w+\s+ago)', lockup_str, re.IGNORECASE)
-                        dur_match = re.search(r'"simpleText":"(\d+:\d+(?::\d+)?)"', lockup_str)
+                        dur_match = re.search(r'"(?:simpleText|content)"\s*:\s*"(\d{1,2}:\d{2}(?::\d{2})?)"', lockup_str)
                         
                         matches.append({
                             "title": title,
