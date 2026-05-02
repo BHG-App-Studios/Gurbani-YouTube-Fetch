@@ -29,7 +29,7 @@ if not YOUTUBE_API_KEY:
     sys.exit(1)
 
 # Collection Names
-COLLECTION_GURBANI = "liveStreams"
+COLLECTION_GURBANI = "Listen_Kirtans_Videos_New"
 COLLECTION_HARMANDIR = "Live-Gurdwaras-YouTube"
 
 # ---------------- FIREBASE DUAL INIT ----------------
