@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
+from bs4 import BeautifulSoup
 import json
 import os
 import sys
@@ -108,6 +109,9 @@ total_inserted_harmandir = 0
 new_ids_gurbani = []
 new_ids_harmandir = []
 
+# Cache for channel logos to avoid redundant scraping
+CHANNEL_LOGO_CACHE = {}
+
 # ---------------- RSS FETCH ----------------
 def fetch_videos_from_channel(channel_id):
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
@@ -150,31 +154,21 @@ def chunk_list(data, chunk_size):
     for i in range(0, len(data), chunk_size):
         yield data[i:i + chunk_size]
 
-def get_live_status_batch(video_ids):
-    live_or_upcoming_ids = set()
-    CHUNK_SIZE = 30 
+def parse_iso_duration(duration_iso):
+    """Converts ISO 8601 duration (e.g., PT8M33S) to MM:SS format."""
+    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_iso)
+    if not match: 
+        return "0:00"
+        
+    hours, minutes, seconds = match.groups()
+    hours = int(hours) if hours else 0
+    minutes = int(minutes) if minutes else 0
+    seconds = int(seconds) if seconds else 0
     
-    for chunk in chunk_list(video_ids, CHUNK_SIZE):
-        url = "https://www.googleapis.com/youtube/v3/videos"
-        params = {
-            "part": "snippet",
-            "id": ",".join(chunk),
-            "key": YOUTUBE_API_KEY,
-            "maxResults": 50
-        }
-        try:
-            r = requests.get(url, params=params, timeout=15)
-            r.raise_for_status()
-            data = r.json()
-            for item in data.get("items", []):
-                vid = item["id"]
-                broadcast_content = item["snippet"].get("liveBroadcastContent", "none")
-                if broadcast_content in ["live", "upcoming"]:
-                    live_or_upcoming_ids.add(vid)
-                    print(f"🚫 Detected Live/Upcoming stream: {vid} ({broadcast_content})")
-        except Exception as e:
-            print(f"⚠️ Error checking live status: {e}")
-    return live_or_upcoming_ids
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    else:
+        return f"{minutes}:{seconds:02d}"
 
 def iso8601_to_seconds(duration):
     match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
@@ -184,13 +178,14 @@ def iso8601_to_seconds(duration):
     s = int(match.group(3) or 0)
     return h * 3600 + m * 60 + s
 
-def fetch_durations_batch(video_ids):
-    duration_map = {}
+def fetch_video_details_batch(video_ids):
+    """Fetches comprehensive details AND live status for up to 50 videos in a SINGLE API call."""
+    details_map = {}
     CHUNK_SIZE = 50 
     for chunk in chunk_list(video_ids, CHUNK_SIZE):
         url = "https://www.googleapis.com/youtube/v3/videos"
         params = {
-            "part": "contentDetails",
+            "part": "snippet,contentDetails,statistics",
             "id": ",".join(chunk),
             "key": YOUTUBE_API_KEY,
             "maxResults": 50
@@ -201,11 +196,59 @@ def fetch_durations_batch(video_ids):
             data = r.json()
             for item in data.get("items", []):
                 vid = item["id"]
-                iso = item["contentDetails"]["duration"]
-                duration_map[vid] = iso8601_to_seconds(iso)
+                
+                # Live Status
+                broadcast_content = item["snippet"].get("liveBroadcastContent", "none")
+                
+                # Duration
+                iso_duration = item["contentDetails"]["duration"]
+                duration_sec = iso8601_to_seconds(iso_duration)
+                duration_formatted = parse_iso_duration(iso_duration)
+                
+                # Timestamps
+                pub_dt = datetime.fromisoformat(item["snippet"]["publishedAt"].replace("Z", "+00:00")).astimezone(timezone.utc)
+                time_ago_ms = str(int(pub_dt.timestamp() * 1000))
+                
+                # Views
+                view_count = int(item["statistics"].get("viewCount", 0))
+
+                details_map[vid] = {
+                    "liveBroadcastContent": broadcast_content,
+                    "duration_sec": duration_sec,
+                    "duration_formatted": duration_formatted,
+                    "channelName": item["snippet"]["channelTitle"],
+                    "channelId": item["snippet"]["channelId"],
+                    "title": item["snippet"]["title"],
+                    "timeAgo": time_ago_ms,
+                    "viewCount": view_count
+                }
         except Exception as e:
-            print(f"⚠️ Error fetching durations: {e}")
-    return duration_map
+            print(f"⚠️ Error fetching video details: {e}")
+    return details_map
+
+def fetch_channel_logo(channel_id):
+    """Scrapes the channel HTML for the logo. Uses cache to prevent multiple requests."""
+    if channel_id in CHANNEL_LOGO_CACHE:
+        return CHANNEL_LOGO_CACHE[channel_id]
+
+    channel_url = f"https://www.youtube.com/channel/{channel_id}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    try:
+        response = requests.get(channel_url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        meta_image = soup.find('meta', property='og:image')
+        if meta_image and meta_image.get('content'):
+            img_url = meta_image['content']
+            CHANNEL_LOGO_CACHE[channel_id] = img_url
+            return img_url
+    except Exception as e:
+        print(f"❌ Error scraping logo for {channel_id}: {e}")
+    
+    CHANNEL_LOGO_CACHE[channel_id] = "" # Prevent retries on failure
+    return ""
 
 def get_working_image_url(video_id):
     maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
@@ -243,7 +286,6 @@ for channel_id in CHANNEL_IDS:
     rss_videos.extend(videos)
 
 # 2. Filter out Existing IDs 
-# Only process a video if it is missing in AT LEAST ONE of the databases
 candidates = []
 for v in rss_videos:
     vid = v["video_id"]
@@ -262,30 +304,32 @@ if not candidates:
 
 candidate_ids = [v["video_id"] for v in candidates]
 
-# 3. Check Live Status (API Call 1)
-print("\n📡 Checking Live/Upcoming status...")
-live_ids_to_exclude = get_live_status_batch(candidate_ids)
-total_skipped_live = len(live_ids_to_exclude)
+# 3. Fetch Complete Video Details (API Call 1 - Chunks of 50)
+print("\n⏱️ Fetching Full Video Details & Live Status (1 API Call per chunk)...")
+details_map = fetch_video_details_batch(candidate_ids)
 
-vod_candidates = [v for v in candidates if v["video_id"] not in live_ids_to_exclude]
-vod_candidate_ids = [v["video_id"] for v in vod_candidates]
-
-if not vod_candidates:
-    print("✅ No videos remaining after live check.")
-    sys.exit(0)
-
-# 4. Check Durations (API Call 2)
-print("\n⏱️ Checking Durations...")
-duration_map = fetch_durations_batch(vod_candidate_ids)
-
-# 5. Insert Final Videos into Respective DBs
+# 4. Insert Final Videos into Respective DBs
 print("\n🚀 Starting Final Filtering & Firebase Insertion...")
-for v in vod_candidates:
+current_timestamp_ms = str(int(time.time() * 1000))
+
+for v in candidates:
     vid = v["video_id"]
-    duration = duration_map.get(vid, 0)
-    title = v["title"]
+    details = details_map.get(vid)
     
-    # --- FILTER 1: Title Keywords ---
+    if not details:
+        print(f"⚠️ Skipping {vid} because API returned no details.")
+        continue
+
+    # --- FILTER 1: Live Status ---
+    if details["liveBroadcastContent"] in ["live", "upcoming"]:
+        print(f"🚫 Skipped (Live/Upcoming stream): {vid}")
+        total_skipped_live += 1
+        continue
+
+    duration_sec = details["duration_sec"]
+    title = details["title"]
+    
+    # --- FILTER 2: Title Keywords ---
     found_keyword = False
     for keyword in EXCLUDED_KEYWORDS:
         pattern = r"\b" + re.escape(keyword) + r"\b"
@@ -298,20 +342,29 @@ for v in vod_candidates:
         total_skipped_keywords += 1
         continue
 
-    # --- FILTER 2: Duration ---
-    if duration < MIN_DURATION_SECONDS:
-        print(f"⏭️ Skipped short ({duration}s): {vid}")
+    # --- FILTER 3: Duration ---
+    if duration_sec < MIN_DURATION_SECONDS:
+        print(f"⏭️ Skipped short ({duration_sec}s): {vid}")
         total_skipped_short += 1
         continue
 
     # --- PREPARE DATA BASE (Shared by both) ---
     final_image_url = get_working_image_url(vid)
+    logo_url = fetch_channel_logo(details["channelId"])
+    
     base_doc_data = {
-        "title": v["title"],
-        "titleLowercase": v["title"].lower(),
-        "url": v["url"],
+        "channelLogoUrl": logo_url,
+        "channelName": details["channelName"],
+        "channel_id": details["channelId"],
+        "duration": details["duration_formatted"],
         "imageUrl": final_image_url,
-        "timestamp": str(int(time.time() * 1000)),
+        "isLive": False,
+        "timeAgo": details["timeAgo"],
+        "timestamp": current_timestamp_ms,
+        "title": title,
+        "titleLowercase": title.lower(),
+        "url": f"https://www.youtube.com/watch?v={vid}",
+        "viewCount": details["viewCount"]
     }
 
     inserted_any = False
@@ -319,7 +372,7 @@ for v in vod_candidates:
     # Insert into Gurbani App DB (WITH searchKeywords)
     if vid not in existing_ids_gurbani:
         gurbani_doc_data = base_doc_data.copy()
-        gurbani_doc_data["searchKeywords"] = generate_search_keywords(v["title"])
+        gurbani_doc_data["searchKeywords"] = generate_search_keywords(title)
         
         db_gurbani.collection(COLLECTION_GURBANI).document().set(gurbani_doc_data)
         existing_ids_gurbani.add(vid)
@@ -336,7 +389,7 @@ for v in vod_candidates:
         inserted_any = True
 
     if inserted_any:
-        print(f"➕ Inserted ({duration}s): {vid} - {title[:30]}...")
+        print(f"➕ Inserted ({details['duration_formatted']}): {vid} - {title[:30]}...")
         time.sleep(0.03)
 
 # ---------------- UPDATE ID INDEXES ----------------
