@@ -10,6 +10,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCudVHqnOekwcvpzNpY8_ERw"
+TARGET_TITLE_FILTER = "Official SGPC LIVE | Katha Hukamnama Sahib"
+FIRESTORE_FIELD = "hukamnama_katha_fatehgarh"
 
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
@@ -46,7 +48,7 @@ def get_working_image_url(video_id):
     return fallback_url
 
 def parse_time_text_to_ms(time_text):
-    """Converts YouTube 'Streamed X hours ago' text into a Unix Timestamp in milliseconds."""
+    """Converts YouTube 'X hours ago' text into a Unix Timestamp in milliseconds."""
     now = datetime.now(timezone.utc)
     if not time_text:
         return int(now.timestamp() * 1000)
@@ -72,9 +74,10 @@ def parse_time_text_to_ms(time_text):
 
 def fetch_channel_data_from_source(channel_id):
     """
-    Scrapes the /streams page and extracts ALL data from ytInitialData.
+    Scrapes the page and extracts ALL data from ytInitialData.
     Cost: 0 API Quota. 1 Request.
     """
+    
     url = f"https://www.youtube.com/channel/{channel_id}/streams"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -107,7 +110,7 @@ def fetch_channel_data_from_source(channel_id):
             if isinstance(obj, dict):
                 if 'videoRenderer' in obj:
                     title = obj['videoRenderer'].get("title", {}).get("runs", [{}])[0].get("text", "")
-                    if "Official SGPC LIVE | Katha Hukamnama Sahib" in title:
+                    if TARGET_TITLE_FILTER.lower() in title.lower():
                         matches_list.append(obj['videoRenderer'])
                 for k, v in obj.items():
                     find_all_videos(v, matches_list)
@@ -119,7 +122,7 @@ def fetch_channel_data_from_source(channel_id):
         find_all_videos(data, matches)
         
         if not matches:
-            print("❌ No matching Katha Hukamnama Sahib video found on the streams page.")
+            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the videos page.")
             return None
 
         # ✅ Guarantee we pick the absolutely newest/latest video mathematically
@@ -131,6 +134,7 @@ def fetch_channel_data_from_source(channel_id):
         # 4. Extract target data
         video_id = target_video.get("videoId", "")
         title = target_video.get("title", {}).get("runs", [{}])[0].get("text", "")
+        channel_name = target_video.get("shortBylineText", {}).get("runs", [{}])[0].get("text", "Sachkhand Sri Hazur Sahib")
         
         # Views
         view_text = target_video.get("viewCountText", {}).get("simpleText", "0")
@@ -146,15 +150,13 @@ def fetch_channel_data_from_source(channel_id):
 
         return {
             "channelLogoUrl": logo_url.replace("s200", "s900").replace("s72", "s900"),
-            "channelName": "Gurdwara Sri Fatehgarh Sahib",
-            "channel_id": CHANNEL_ID,
+            "channelName": channel_name,
             "duration": duration,
-            "hukamnama": CHANNEL_ID,
-            "hukamnama_katha_fatehgarh_sahib": CHANNEL_ID,
+            FIRESTORE_FIELD: CHANNEL_ID,
             "imageUrl": get_working_image_url(video_id),
             "isLive": False,
-            "timeAgo": str(published_timestamp_ms),   
-            "timestamp": str(current_timestamp_ms),    
+            "timeAgo": str(published_timestamp_ms),  
+            "timestamp": str(current_timestamp_ms), 
             "title": title,
             "url": f"https://www.youtube.com/watch?v={video_id}",
             "viewCount": view_count
@@ -176,11 +178,11 @@ def process_and_update_firestore():
     print("\n🔍 Reading existing data from Firestore...")
     
     gurbani_docs = db_gurbani.collection(COLLECTION_GURBANI).where(
-        filter=FieldFilter("hukamnama_katha_fatehgarh_sahib", "==", CHANNEL_ID)
+        filter=FieldFilter(FIRESTORE_FIELD, "==", CHANNEL_ID)
     ).limit(1).get()
     
     harmandir_docs = db_harmandir.collection(COLLECTION_HARMANDIR).where(
-        filter=FieldFilter("hukamnama_katha_fatehgarh_sahib", "==", CHANNEL_ID)
+        filter=FieldFilter(FIRESTORE_FIELD, "==", CHANNEL_ID)
     ).limit(1).get()
 
     gurbani_doc = gurbani_docs[0] if gurbani_docs else None
@@ -213,7 +215,7 @@ def process_and_update_firestore():
     # Gurbani Update
     safe_update(gurbani_doc, base_payload, "Gurbani App")
 
-    # Harmandir Update
+    # Harmandir Update (Requires titleLowercase)
     harmandir_payload = base_payload.copy()
     harmandir_payload["titleLowercase"] = base_payload["title"].lower()
     safe_update(harmandir_doc, harmandir_payload, "Harmandir App")
