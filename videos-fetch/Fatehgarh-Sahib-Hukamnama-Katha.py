@@ -208,7 +208,6 @@ def process_and_update_firestore():
         "channelName": latest_data["channelName"],
         "channel_id": CHANNEL_ID,
         "duration": latest_data["duration"],
-        "hukamnama": CHANNEL_ID,
         TARGET_DOC_ID: CHANNEL_ID,
         "imageUrl": get_working_image_url(video_id),
         "isLive": False,
