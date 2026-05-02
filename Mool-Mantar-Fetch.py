@@ -111,7 +111,7 @@ def parse_iso_duration(duration_iso):
 # ---------------- YOUTUBE API LOGIC (COST: 2 UNITS TOTAL) ----------------
 def fetch_latest_api_data():
     # Convert Channel ID (UC...) to Uploads Playlist ID (UU...)
-    playlist_id = "UU" + CHANNEL_ID[2:]
+    playlist_id = "UUL" + CHANNEL_ID[2:]
     
     # --- UNIT 1: Fetch the most recent uploads ---
     playlist_url = f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId={playlist_id}&maxResults={FETCH_LIMIT}&key={YOUTUBE_API_KEY}"
