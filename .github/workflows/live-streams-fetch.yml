@@ -1,4 +1,4 @@
-name: Trigger Python Scripts
+name: Live Fetch
 
 on:
   workflow_dispatch:
@@ -24,51 +24,23 @@ jobs:
 
           
 
-      - name: 🎵 Run Live Youtube Videos Fetch
+      - name: 🎵 Run All Live Youtube Videos Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Hukamnama-Hazur-Sahib-Fetch.py
+        run: python All-Live-Fetch.py
         
 
-      # ---------------- SGPC & Hukamnama ----------------
+      # ---------------- SGPC ----------------
 
       - name: 🚀 Run SGPC LIVE HARMANDIR SAHIB Stream Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Fatehgarh-Sahib-Hukamnama-Fetch.py
+        run: python Harmandir-Sahib-Fetch.py
 
-      - name: 📖 Run Hukamnama Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Hukamnama-Fetch.py
-
-
-      - name: 📖 Run Hukamnama Hazur Sahib Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Hukamnama-Hazur-Sahib-Fetch.py
-
-      - name: 📖 Run Hukamnama Katha Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Hukamnama-Katha-Fetch.py
-
-      - name: 📖 Run Fatehgarh Sahib Hukamnama Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Fatehgarh-Sahib-Hukamnama-Fetch.py
 
       # ---------------- Historic Gurdwaras ----------------
 
@@ -168,14 +140,6 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python Mool-Mantar-Fetch.py
 
-      - name: 🎵 Run Fatehgarh Katha Hukamnama Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Fatehgarh-Katha-Hukamnama-Fetch.py
-
-
 
       - name: 🎵 Run Dhan Ramdas Gur Fetch
         env:
@@ -184,11 +148,3 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python Live-Dhan-Ramdas-Gur-Fetch.py
 
-      # ---------------- All Videos fetch ----------------
-      
-      - name: 🎵 Run Offline Youtube Videos Fetch
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python All-Videos-Fetch.py
