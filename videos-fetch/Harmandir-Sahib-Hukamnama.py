@@ -31,8 +31,8 @@ if not YOUTUBE_API_KEY:
     sys.exit(1)
 
 # Collection Names
-COLLECTION_GURBANI = "liveStreams"
-COLLECTION_HARMANDIR = "Live-Gurdwaras-YouTube"
+COLLECTION_GURBANI = "Listen_Kirtans_Videos_New"
+COLLECTION_HARMANDIR = "Kirtan-Youtube-Videos"
 
 # ---------------- FIREBASE DUAL INIT ----------------
 print("🔌 Initializing Firebase Connections...")
