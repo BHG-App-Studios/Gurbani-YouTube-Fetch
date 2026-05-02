@@ -278,26 +278,27 @@ def process_and_update_firestore():
         "viewCount": latest_data["viewCount"]
     }
 
-    # ---------------- 3. CREATE NEW FIREBASE DOCUMENTS ----------------
-    def safe_create(collection_ref, payload, app_name):
+    # ---------------- 3. CREATE/UPDATE FIREBASE DOCUMENTS ----------------
+    def safe_create_or_update(collection_ref, payload, app_name, custom_doc_id):
         try:
-            # .add() creates a brand new document with an auto-generated ID
-            _, doc_ref = collection_ref.add(payload)
-            print(f"✅ New document created in {app_name} successfully! (ID: {doc_ref.id})")
+            # .set() smartly overwrites an existing document with this ID, or creates a new one if it doesn't exist
+            collection_ref.document(custom_doc_id).set(payload)
+            print(f"✅ Document successfully updated/created in {app_name}! (ID: {custom_doc_id})")
             return True
         except Exception as e:
-            print(f"❌ Failed to create document in {app_name}: {e}")
+            print(f"❌ Failed to process document in {app_name}: {e}")
             return False
 
-    print("\n📝 Creating new documents in Databases...")
+    document_id = f"{TARGET_DOC_ID}-{video_id}"
+    print(f"\n📝 Processing documents with specific ID: {document_id} ...")
     
-    # Create new document in Gurbani App 
-    gurbani_success = safe_create(db_gurbani.collection(COLLECTION_GURBANI), base_payload, "Gurbani App")
+    # Create/Update document in Gurbani App 
+    gurbani_success = safe_create_or_update(db_gurbani.collection(COLLECTION_GURBANI), base_payload, "Gurbani App", document_id)
 
-    # Create new document in Harmandir App
+    # Create/Update document in Harmandir App
     harmandir_payload = base_payload.copy()
     harmandir_payload["titleLowercase"] = base_payload["title"].lower()
-    harmandir_success = safe_create(db_harmandir.collection(COLLECTION_HARMANDIR), harmandir_payload, "Harmandir App")
+    harmandir_success = safe_create_or_update(db_harmandir.collection(COLLECTION_HARMANDIR), harmandir_payload, "Harmandir App", document_id)
 
     # ---------------- 4. UPDATE LOCAL STATE ON SUCCESS ----------------
     if gurbani_success or harmandir_success:
