@@ -151,14 +151,12 @@ def fetch_channel_data_from_source(channel_id):
         return {
             "channelLogoUrl": logo_url.replace("s200", "s900").replace("s72", "s900"),
             "channelName": channel_name,
-            "channel_id": CHANNEL_ID,
             "duration": duration,
-            "hukamnama": CHANNEL_ID,
             FIRESTORE_FIELD: CHANNEL_ID,
             "imageUrl": get_working_image_url(video_id),
             "isLive": False,
-            "timeAgo": str(published_timestamp_ms),     # ✅ Video published time
-            "timestamp": str(current_timestamp_ms),     # ✅ Current time right now
+            "timeAgo": str(published_timestamp_ms),  
+            "timestamp": str(current_timestamp_ms), 
             "title": title,
             "url": f"https://www.youtube.com/watch?v={video_id}",
             "viewCount": view_count
