@@ -14,7 +14,7 @@ from google.cloud.firestore_v1 import FieldFilter
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCStu4Pep14Ks6HW2dQeSUCA"
 TARGET_TITLE = "Mool Mantar 24x7"
-FETCH_LIMIT = 10             # 🔍 Number of recent uploads to check
+FETCH_LIMIT = 5          # 🔍 Number of recent uploads to check
 MIN_DURATION_SECONDS = 180   # ⏱️ 3 minutes minimum to reject YouTube Shorts
 
 # Env variables
