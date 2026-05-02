@@ -76,17 +76,17 @@ def parse_time_text_to_ms(time_text):
 
 def fetch_channel_data_from_source(channel_id):
     """
-    Scrapes the /videos page and extracts ALL data from ytInitialData.
+    Scrapes the targeted page and extracts ALL data from ytInitialData.
     Cost: 0 API Quota. 1 Request.
     """
-    
-    url = f"https://www.youtube.com/channel/{channel_id}/streams"
+    # ✅ FIX: Now uses the WHERE_TO_FETCH variable dynamically
+    url = f"https://www.youtube.com/channel/{channel_id}/{WHERE_TO_FETCH}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9'
     }
     
-    print(f"🔄 Scraping {url}...")
+    print(f"🔄 Scraping {url}")
     try:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
@@ -124,7 +124,7 @@ def fetch_channel_data_from_source(channel_id):
         find_all_videos(data, matches)
         
         if not matches:
-            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the videos page.")
+            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the {WHERE_TO_FETCH} page.")
             return None
 
         # ✅ Guarantee we pick the absolutely newest/latest video mathematically
