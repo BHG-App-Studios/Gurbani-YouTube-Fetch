@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
+        # Need to fetch history for pushing back later if using specific auth, 
+        # but standard checkout is usually fine for default token pushing.
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -58,3 +60,14 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python videos-fetch/Hazur-Sahib-Hukamnama.py
+
+      # ---------------- SAVE STATE ----------------
+      
+      - name: 💾 Commit and Push State Files
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add more/
+          # Only commit if there are changes in the 'more/' folder (avoids workflow errors)
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update fetched video state logs"
+          git push
