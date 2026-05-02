@@ -13,6 +13,8 @@ CHANNEL_ID = "UCq67gxQO7e1AHN_pYAoiAwQ"
 TARGET_TITLE_FILTER = "Today Hukamnama Hazur Sahib"
 FIRESTORE_FIELD = "hukamnama_hazur"
 
+WHERE_TO_FETCH = "videos"
+
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
 
@@ -74,17 +76,17 @@ def parse_time_text_to_ms(time_text):
 
 def fetch_channel_data_from_source(channel_id):
     """
-    Scrapes the /videos page and extracts ALL data from ytInitialData.
+    Scrapes the targeted page and extracts ALL data from ytInitialData.
     Cost: 0 API Quota. 1 Request.
     """
-    # ✅ CHANGED: Now targeting /videos instead of /streams
-    url = f"https://www.youtube.com/channel/{channel_id}/videos"
+    url = f"https://www.youtube.com/channel/{channel_id}/{WHERE_TO_FETCH}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cookie': 'CONSENT=YES+cb.20230501-14-p0.en+FX+038' # Bypasses YouTube consent blocks
     }
     
-    print(f"🔄 Scraping {url}...")
+    print(f"🔄 Scraping {url}")
     try:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
@@ -105,52 +107,94 @@ def fetch_channel_data_from_source(channel_id):
         except Exception:
             pass
         
-        # 3. Recursive helper to find ALL matching videos
-        def find_all_videos(obj, matches_list):
+        matches = []
+
+        # 3. Recursive helper to find ALL matching videos regardless of YT layout changes
+        def find_all_videos(obj):
             if isinstance(obj, dict):
+                # Format A: Classic videoRenderer
                 if 'videoRenderer' in obj:
                     title = obj['videoRenderer'].get("title", {}).get("runs", [{}])[0].get("text", "")
-                    if TARGET_TITLE_FILTER.lower() in title.lower():
-                        matches_list.append(obj['videoRenderer'])
+                    if title and TARGET_TITLE_FILTER.lower() in title.lower():
+                        vid_obj = obj['videoRenderer']
+                        vid_str = json.dumps(vid_obj)
+                        
+                        video_id = vid_obj.get("videoId", "")
+                        view_match = re.search(r'([0-9,KMB\.]+\s*views?)', vid_str, re.IGNORECASE)
+                        time_match = re.search(r'(Streamed\s+\d+\s+\w+\s+ago|\d+\s+\w+\s+ago)', vid_str, re.IGNORECASE)
+                        dur_match = re.search(r'"simpleText":"(\d+:\d+(?::\d+)?)"', vid_str)
+                        
+                        matches.append({
+                            "title": title,
+                            "videoId": video_id,
+                            "viewText": view_match.group(1) if view_match else "0",
+                            "timeText": time_match.group(1) if time_match else "",
+                            "duration": dur_match.group(1) if dur_match else "00:00"
+                        })
+                        
+                # Format B: New lockupViewModel (From your screenshot)
+                elif 'lockupViewModel' in obj:
+                    title = obj['lockupViewModel'].get('metadata', {}).get('lockupMetadataViewModel', {}).get('title', {}).get('content', '')
+                    if title and TARGET_TITLE_FILTER.lower() in title.lower():
+                        lockup_obj = obj['lockupViewModel']
+                        lockup_str = json.dumps(lockup_obj)
+                        
+                        video_id = lockup_obj.get('contentId', '')
+                        if not video_id:
+                            try:
+                                video_id = lockup_obj['onTap']['innertubeCommand']['watchEndpoint']['videoId']
+                            except Exception:
+                                pass
+                        
+                        view_match = re.search(r'([0-9,KMB\.]+\s*views?)', lockup_str, re.IGNORECASE)
+                        time_match = re.search(r'(Streamed\s+\d+\s+\w+\s+ago|\d+\s+\w+\s+ago)', lockup_str, re.IGNORECASE)
+                        dur_match = re.search(r'"simpleText":"(\d+:\d+(?::\d+)?)"', lockup_str)
+                        
+                        matches.append({
+                            "title": title,
+                            "videoId": video_id,
+                            "viewText": view_match.group(1) if view_match else "0",
+                            "timeText": time_match.group(1) if time_match else "",
+                            "duration": dur_match.group(1) if dur_match else "00:00"
+                        })
+
                 for k, v in obj.items():
-                    find_all_videos(v, matches_list)
+                    find_all_videos(v)
             elif isinstance(obj, list):
                 for item in obj:
-                    find_all_videos(item, matches_list)
+                    find_all_videos(item)
                     
-        matches = []
-        find_all_videos(data, matches)
+        find_all_videos(data)
         
         if not matches:
-            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the videos page.")
+            print(f"❌ No matching '{TARGET_TITLE_FILTER}' video found on the {WHERE_TO_FETCH} page.")
             return None
 
         # ✅ Guarantee we pick the absolutely newest/latest video mathematically
         target_video = max(
             matches, 
-            key=lambda v: parse_time_text_to_ms(v.get("publishedTimeText", {}).get("simpleText", ""))
+            key=lambda v: parse_time_text_to_ms(v.get("timeText", ""))
         )
 
         # 4. Extract target data
-        video_id = target_video.get("videoId", "")
-        title = target_video.get("title", {}).get("runs", [{}])[0].get("text", "")
-        channel_name = target_video.get("shortBylineText", {}).get("runs", [{}])[0].get("text", "Sachkhand Sri Hazur Sahib")
+        video_id = target_video["videoId"]
+        title = target_video["title"]
         
         # Views
-        view_text = target_video.get("viewCountText", {}).get("simpleText", "0")
+        view_text = target_video["viewText"]
         view_count = int(re.sub(r'\D', '', view_text)) if view_text else 0
         
         # Duration
-        duration = target_video.get("lengthText", {}).get("simpleText", "00:00")
+        duration = target_video["duration"]
         
         # Timestamps
-        time_text = target_video.get("publishedTimeText", {}).get("simpleText", "")
+        time_text = target_video["timeText"]
         published_timestamp_ms = parse_time_text_to_ms(time_text)
         current_timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
         return {
             "channelLogoUrl": logo_url.replace("s200", "s900").replace("s72", "s900"),
-            "channelName": channel_name,
+            "channelName": "Gurdwara Sri Fatehgarh Sahib",
             "duration": duration,
             FIRESTORE_FIELD: CHANNEL_ID,
             "imageUrl": get_working_image_url(video_id),
