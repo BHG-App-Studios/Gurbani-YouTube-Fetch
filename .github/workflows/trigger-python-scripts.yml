@@ -29,7 +29,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Fatehgarh-Sahib-Hukamnama-Fetch.py
+        run: python Hukamnama-Hazur-Sahib-Fetch.py
         
 
       # ---------------- SGPC & Hukamnama ----------------
