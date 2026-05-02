@@ -22,16 +22,13 @@ jobs:
           pip install requests firebase-admin google-cloud-firestore
           pip install requests firebase-admin beautifulsoup4
 
-          
-
       - name: 🎵 Run All Youtube Videos Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python All-Videos-Fetch.py
+        run: python videos-fetch/All-Videos-Fetch.py
         
-
       # ---------------- SGPC ----------------
 
       - name: 🚀 Run Fatehgarh Sahib Hukamnama Katha Fetch
@@ -39,35 +36,25 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Fatehgarh-Sahib-Hukamnama-Katha.py
-
-
+        run: python videos-fetch/Fatehgarh-Sahib-Hukamnama-Katha.py
 
       - name: 🛕 Run Harmandir Sahib Hukamnama Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Harmandir-Sahib-Hukamnama.py
-
-
-
+        run: python videos-fetch/Harmandir-Sahib-Hukamnama.py
 
       - name: 🛕 Run Harmandir Sahib Hukamnama Katha Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Harmandir-Sahib-Hukamnama-Katha.py
-
-
-
+        run: python videos-fetch/Harmandir-Sahib-Hukamnama-Katha.py
 
       - name: 🛕 Run Hazur Sahib Hukamnama Fetch
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python Hazur-Sahib-Hukamnama.py
-
-    
+        run: python videos-fetch/Hazur-Sahib-Hukamnama.py
