@@ -174,7 +174,6 @@ def fetch_latest_api_data():
 
                 # Build exact requested payload
                 return {
-                    "imageUrl": get_working_image_url(vid_id),           # String
                     "isLive": is_live,                                   # Boolean
                     "title": snippet.get("title", ""),                   # String
                     "url": f"https://www.youtube.com/watch?v={vid_id}",  # String
