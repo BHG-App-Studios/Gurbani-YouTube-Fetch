@@ -29,8 +29,8 @@ if not YOUTUBE_API_KEY:
     sys.exit(1)
 
 # Collection Names
-COLLECTION_GURBANI = "liveStreams"
-COLLECTION_HARMANDIR = "Live-Gurdwaras-YouTube"
+COLLECTION_GURBANI = "Listen_Kirtans_Videos_New"
+COLLECTION_HARMANDIR = "Kirtan-Youtube-Videos"
 
 # ---------------- FIREBASE DUAL INIT ----------------
 print("🔌 Initializing Firebase Connections...")
@@ -165,23 +165,9 @@ def process_and_update_firestore():
     video_id = latest_data["video_id"]
     new_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # ---------------- 1. READ FIREBASE ----------------
     print(f"\n🔍 Target Stream Found: {latest_data['title']} ({latest_data['viewCount']} views)")
-    print("🔍 Reading existing data from Firestore...")
-    
-    # ✅ FILTER: Target Document ID
-    gurbani_docs = db_gurbani.collection(COLLECTION_GURBANI).where(
-        filter=FieldFilter(TARGET_DOC_ID, "==", CHANNEL_ID)
-    ).limit(1).get()
-    
-    harmandir_docs = db_harmandir.collection(COLLECTION_HARMANDIR).where(
-        filter=FieldFilter(TARGET_DOC_ID, "==", CHANNEL_ID)
-    ).limit(1).get()
 
-    gurbani_doc = gurbani_docs[0] if gurbani_docs else None
-    harmandir_doc = harmandir_docs[0] if harmandir_docs else None
-
-    # ---------------- 2. BUILD FINAL PAYLOAD ----------------
+    # ---------------- 1. BUILD FINAL PAYLOAD ----------------
     time_ago_ms = str(int(latest_data["published"].timestamp() * 1000))
     current_timestamp_ms = str(int(datetime.now(timezone.utc).timestamp() * 1000))
     logo_url = fetch_channel_logo(CHANNEL_ID)
@@ -202,31 +188,24 @@ def process_and_update_firestore():
         "viewCount": latest_data["viewCount"]
     }
 
-    # ---------------- 3. CONDITIONAL WRITE FIREBASE ----------------
-    def safe_update(doc_snapshot, payload, app_name):
-        if not doc_snapshot:
-            print(f"❌ Document missing in {app_name}, cannot update.")
-            return
+    # ---------------- 2. CREATE NEW FIREBASE DOCUMENTS ----------------
+    def safe_create(collection_ref, payload, app_name):
+        try:
+            # .add() creates a brand new document with an auto-generated ID
+            _, doc_ref = collection_ref.add(payload)
+            print(f"✅ New document created in {app_name} successfully! (ID: {doc_ref.id})")
+        except Exception as e:
+            print(f"❌ Failed to create document in {app_name}: {e}")
 
-        existing = doc_snapshot.to_dict()
-        
-        # Prevent unnecessary writes if nothing important changed
-        if (existing.get("url") == payload["url"] and 
-            existing.get("viewCount") == payload["viewCount"] and 
-            existing.get("title") == payload["title"]):
-            print(f"⏭ No data changed for {app_name} (Views still {payload['viewCount']}). Write skipped.")
-            return
-
-        doc_snapshot.reference.update(payload)
-        print(f"✅ {app_name} updated successfully!")
-
-    print("\n📝 Pushing updates to Databases...")
+    print("\n📝 Creating new documents in Databases...")
     
-    safe_update(gurbani_doc, base_payload, "Gurbani App")
+    # Create new document in Gurbani App (Listen_Kirtans_Videos_New)
+    safe_create(db_gurbani.collection(COLLECTION_GURBANI), base_payload, "Gurbani App")
 
+    # Create new document in Harmandir App
     harmandir_payload = base_payload.copy()
     harmandir_payload["titleLowercase"] = base_payload["title"].lower()
-    safe_update(harmandir_doc, harmandir_payload, "Harmandir App")
+    safe_create(db_harmandir.collection(COLLECTION_HARMANDIR), harmandir_payload, "Harmandir App")
 
 if __name__ == "__main__":
     process_and_update_firestore()
