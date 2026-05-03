@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
+from bs4 import BeautifulSoup
 import json
 import os
 import sys
@@ -12,9 +13,7 @@ import re
 
 # ---------------- CONFIG ----------------
 CHANNEL_IDS = [
-   
     "UC_JnnWTC6gHc59JwfMPTjdw",
-
 ]
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
@@ -57,19 +56,41 @@ cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
 app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
 db_harmandir = firestore.client(app=app_harmandir)
 
+
 # ---------------- HELPER METHODS ----------------
+def fetch_channel_logo(channel_id):
+    """Scrapes the channel HTML for the logo (Cost: 0 Units)"""
+    channel_url = f"https://www.youtube.com/channel/{channel_id}"
+    print(f"🖼️ Scraping Logo from: {channel_url}...")
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+    try:
+        response = requests.get(channel_url, headers=headers, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        meta_image = soup.find('meta', property='og:image')
+        if meta_image and meta_image.get('content'):
+            print(f"✅ Logo found: {meta_image['content']}")
+            return meta_image['content']
+    except Exception as e:
+        print(f"❌ Error scraping logo: {e}")
+    return ""
+
 def chunk_list(data, chunk_size):
     for i in range(0, len(data), chunk_size):
         yield data[i:i + chunk_size]
 
-def get_ONLY_live_streams_batch(video_ids):
-    active_live_ids = set()
+def get_live_streams_details_batch(video_ids):
+    """Checks live status and grabs statistics & channel info (Cost: 1 Unit per 50 videos)"""
+    active_live_details = {}
     CHUNK_SIZE = 50 
     
     for chunk in chunk_list(video_ids, CHUNK_SIZE):
         url = "https://www.googleapis.com/youtube/v3/videos"
         params = {
-            "part": "snippet",
+            "part": "snippet,statistics",
             "id": ",".join(chunk),
             "key": YOUTUBE_API_KEY,
             "maxResults": 50
@@ -84,11 +105,15 @@ def get_ONLY_live_streams_batch(video_ids):
                 
                 # ONLY grab videos that are actively "live"
                 if broadcast_content == "live":
-                    active_live_ids.add(vid)
+                    active_live_details[vid] = {
+                        "channelName": item["snippet"].get("channelTitle", ""),
+                        "channelId": item["snippet"].get("channelId", ""),
+                        "viewCount": int(item.get("statistics", {}).get("viewCount", 0))
+                    }
                     print(f"🔴 Detected Active LIVE stream: {vid}")
         except Exception as e:
             print(f"⚠️ Error checking live status: {e}")
-    return active_live_ids
+    return active_live_details
 
 def get_working_image_url(video_id):
     maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
@@ -129,14 +154,15 @@ existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc
 print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
 print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
 
-# ---------------- CLEANUP STALE LIVE STREAMS (NEW LOGIC) ----------------
+# ---------------- CLEANUP STALE LIVE STREAMS ----------------
 all_existing_ids = existing_ids_gurbani.union(existing_ids_harmandir)
 total_deleted_gurbani = 0
 total_deleted_harmandir = 0
 
 if all_existing_ids:
     print(f"\n🔄 Checking {len(all_existing_ids)} previously saved live streams...")
-    still_live_ids = get_ONLY_live_streams_batch(list(all_existing_ids))
+    # Get details for currently live streams. We only care about the keys (IDs) for cleanup.
+    still_live_ids = set(get_live_streams_details_batch(list(all_existing_ids)).keys())
     stale_ids = all_existing_ids - still_live_ids
 
     if stale_ids:
@@ -148,8 +174,7 @@ if all_existing_ids:
             # Cleanup Gurbani
             if vid in existing_ids_gurbani:
                 existing_ids_gurbani.remove(vid)
-                # Find and delete document by matching the url
-                docs = db_gurbani.collection(COLLECTION_NAME).where("url", "==", target_url).stream()
+                docs = db_gurbani.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
                 for doc in docs:
                     doc.reference.delete()
                 total_deleted_gurbani += 1
@@ -157,8 +182,7 @@ if all_existing_ids:
             # Cleanup Harmandir
             if vid in existing_ids_harmandir:
                 existing_ids_harmandir.remove(vid)
-                # Find and delete document by matching the url
-                docs = db_harmandir.collection(COLLECTION_NAME).where("url", "==", target_url).stream()
+                docs = db_harmandir.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
                 for doc in docs:
                     doc.reference.delete()
                 total_deleted_harmandir += 1
@@ -223,7 +247,6 @@ def fetch_videos_from_channel(channel_id):
             "video_id": video_id,
             "title": title_el.text.strip(),
             "url": f"https://www.youtube.com/watch?v={video_id}",
-            "imageUrl": f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
             "published": published_dt
         })
     return videos
@@ -258,12 +281,12 @@ if not candidates:
 
 candidate_ids = [v["video_id"] for v in candidates]
 
-# 3. Check Live Status (API Call)
-print("\n📡 Checking Live status (Filtering OUT normal videos)...")
-active_live_ids = get_ONLY_live_streams_batch(candidate_ids)
+# 3. Check Live Status and Get Details (API Call)
+print("\n📡 Checking Live status & fetching details (Filtering OUT normal videos)...")
+active_live_details = get_live_streams_details_batch(candidate_ids)
 
 # Keep ONLY the candidates that are currently LIVE
-live_candidates = [v for v in candidates if v["video_id"] in active_live_ids]
+live_candidates = [v for v in candidates if v["video_id"] in active_live_details]
 total_skipped_not_live = len(candidates) - len(live_candidates)
 
 if not live_candidates:
@@ -290,6 +313,10 @@ if not live_candidates:
 
 # 4. Insert Final Live Streams into Respective DBs
 print("\n🚀 Starting Final Filtering & Firebase Insertion...")
+
+# Cache logos so we don't scrape the same channel multiple times per run
+channel_logos = {}
+
 for v in live_candidates:
     vid = v["video_id"]
     title = v["title"]
@@ -307,15 +334,29 @@ for v in live_candidates:
         total_skipped_keywords += 1
         continue
 
-    # --- PREPARE DATABASE DOCUMENT (Shared by both) ---
+    # --- PREPARE EXTENDED DATABASE DOCUMENT ---
+    details = active_live_details[vid]
+    channel_id = details["channelId"]
+    
+    # Scrape Logo if not already cached
+    if channel_id not in channel_logos:
+        channel_logos[channel_id] = fetch_channel_logo(channel_id)
+        
+    logo_url = channel_logos[channel_id]
     final_image_url = get_working_image_url(vid)
+    published_ms = str(int(v["published"].timestamp() * 1000))
+
     base_doc_data = {
+        "channelLogoUrl": logo_url,
+        "channelName": details["channelName"],
+        "imageUrl": final_image_url,
+        "isLive": True,
+        "timeAgo": published_ms,
         "title": v["title"],
         "titleLowercase": v["title"].lower(),
         "url": v["url"],
-        "imageUrl": final_image_url,
-        "timestamp": str(int(time.time() * 1000)),
-        "isLive": True # Explicitly flag it as live
+        "viewCount": details["viewCount"],
+        "timestamp": str(int(time.time() * 1000)), # Keep original insertion timestamp logic
     }
 
     inserted_any = False
