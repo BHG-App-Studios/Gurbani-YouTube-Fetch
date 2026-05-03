@@ -198,9 +198,7 @@ def process_and_update_firestore():
     base_payload = {
         "channelLogoUrl": logo_url,
         "channelName": latest_data["channelName"],
-        "channel_id": CHANNEL_ID,
         "duration": latest_data["duration"],
-        "hukamnama": CHANNEL_ID,
         TARGET_DOC_ID: CHANNEL_ID,  # ✅ Dynamic field injection
         "imageUrl": get_working_image_url(video_id),
         "isLive": False,
