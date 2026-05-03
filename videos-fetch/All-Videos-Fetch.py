@@ -85,7 +85,7 @@ app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_ap
 db_harmandir = firestore.client(app=app_harmandir)
 
 # ---------------- READ EXISTING IDS (2 READS) ----------------
-print("📖 Fetching existing Video IDs from both databases...")
+print("\n📖 Fetching existing Video IDs from both databases...")
 
 # Read Gurbani DB
 doc_gurbani = db_gurbani.collection(COLLECTION_GURBANI).document(ALL_IDS_DOC).get()
@@ -104,6 +104,7 @@ total_skipped_existing = 0
 total_skipped_live = 0
 total_skipped_short = 0
 total_skipped_keywords = 0
+total_skipped_duplicate_titles = 0
 total_inserted_gurbani = 0
 total_inserted_harmandir = 0
 new_ids_gurbani = []
@@ -112,7 +113,7 @@ new_ids_harmandir = []
 # Cache for channel logos to avoid redundant scraping
 CHANNEL_LOGO_CACHE = {}
 
-# ---------------- RSS FETCH ----------------
+# ---------------- HELPER METHODS ----------------
 def fetch_videos_from_channel(channel_id):
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     try:
@@ -149,7 +150,6 @@ def fetch_videos_from_channel(channel_id):
         })
     return videos
 
-# ---------------- HELPER METHODS ----------------
 def chunk_list(data, chunk_size):
     for i in range(0, len(data), chunk_size):
         yield data[i:i + chunk_size]
@@ -275,61 +275,35 @@ def generate_search_keywords(title):
                     keywords.add(prefix)
     return list(keywords)
 
-# ---------------- MAIN LOGIC ----------------
-rss_videos = []
+# ---------------- MAIN LOGIC PIPELINE ----------------
 
 # 1. Gather all videos from RSS
+print("\n---------------- STARTING RSS FETCH ----------------")
+rss_videos = []
 for channel_id in CHANNEL_IDS:
-    print(f"\n🔍 Fetching channel: {channel_id}")
+    print(f"🔍 Fetching channel: {channel_id}")
     videos = fetch_videos_from_channel(channel_id)
     total_fetched += len(videos)
     rss_videos.extend(videos)
 
-# 2. Filter out Existing IDs 
-candidates = []
+# 2. Local Filters (ID & Keyword Exclusions - NO API COST)
+print("\n🧹 Filtering out existing DB videos and bad keywords locally...")
+candidates_for_api = []
+seen_rss_ids = set()
+
 for v in rss_videos:
     vid = v["video_id"]
+    title = v["title"]
+
+    # Filter A: Existing in DB Check
     if vid in existing_ids_gurbani and vid in existing_ids_harmandir:
         total_skipped_existing += 1
         continue
-    if any(c["video_id"] == vid for c in candidates):
-        continue
-    candidates.append(v)
-
-print(f"\n📝 Candidates needing processing (missing in at least one DB): {len(candidates)}")
-
-if not candidates:
-    print("✅ No new videos to process for either database.")
-    sys.exit(0)
-
-candidate_ids = [v["video_id"] for v in candidates]
-
-# 3. Fetch Complete Video Details (API Call 1 - Chunks of 50)
-print("\n⏱️ Fetching Full Video Details & Live Status (1 API Call per chunk)...")
-details_map = fetch_video_details_batch(candidate_ids)
-
-# 4. Insert Final Videos into Respective DBs
-print("\n🚀 Starting Final Filtering & Firebase Insertion...")
-current_timestamp_ms = str(int(time.time() * 1000))
-
-for v in candidates:
-    vid = v["video_id"]
-    details = details_map.get(vid)
-    
-    if not details:
-        print(f"⚠️ Skipping {vid} because API returned no details.")
+        
+    if vid in seen_rss_ids:
         continue
 
-    # --- FILTER 1: Live Status ---
-    if details["liveBroadcastContent"] in ["live", "upcoming"]:
-        print(f"🚫 Skipped (Live/Upcoming stream): {vid}")
-        total_skipped_live += 1
-        continue
-
-    duration_sec = details["duration_sec"]
-    title = details["title"]
-    
-    # --- FILTER 2: Title Keywords ---
+    # Filter B: Bad Keywords Check 
     found_keyword = False
     for keyword in EXCLUDED_KEYWORDS:
         pattern = r"\b" + re.escape(keyword) + r"\b"
@@ -341,12 +315,62 @@ for v in candidates:
     if found_keyword:
         total_skipped_keywords += 1
         continue
+        
+    # Filter C: Fast Shorts Hack (Drops obvious shorts before API check)
+    if "#shorts" in title.lower():
+        print(f"✂️ Skipped (Obvious Short in Title): {title[:40]}...")
+        total_skipped_short += 1
+        continue
 
-    # --- FILTER 3: Duration ---
+    candidates_for_api.append(v)
+    seen_rss_ids.add(vid)
+
+print(f"\n📝 Candidates surviving local filters needing API checking: {len(candidates_for_api)}")
+
+if not candidates_for_api:
+    print("✅ No new valid videos to process for either database.")
+    sys.exit(0)
+
+# 3. Fetch Complete Video Details (API Call - Chunks of 50)
+print("\n⏱️ Fetching Full Video Details & Live Status (via YouTube API)...")
+candidate_ids = [v["video_id"] for v in candidates_for_api]
+details_map = fetch_video_details_batch(candidate_ids)
+
+# 4. Final Filters & Firebase Insertion
+print("\n🚀 Starting Final API Filtering & Firebase Insertion...")
+current_timestamp_ms = str(int(time.time() * 1000))
+seen_final_titles = set()
+
+for v in candidates_for_api:
+    vid = v["video_id"]
+    details = details_map.get(vid)
+    
+    if not details:
+        print(f"⚠️ Skipping {vid} because API returned no details.")
+        continue
+
+    title = details["title"]
+
+    # --- FINAL API FILTER 1: Live Status ---
+    if details["liveBroadcastContent"] in ["live", "upcoming"]:
+        print(f"🚫 Skipped (Live/Upcoming stream): {vid}")
+        total_skipped_live += 1
+        continue
+
+    # --- FINAL API FILTER 2: Duration Check ---
+    duration_sec = details["duration_sec"]
     if duration_sec < MIN_DURATION_SECONDS:
         print(f"⏭️ Skipped short ({duration_sec}s): {vid}")
         total_skipped_short += 1
         continue
+        
+    # --- FINAL API FILTER 3: Title Deduplication ---
+    # Prevents two identical videos uploaded by different channels from both being pushed
+    if title in seen_final_titles:
+        print(f"👯 Skipped Duplicate Title: {title[:40]}...")
+        total_skipped_duplicate_titles += 1
+        continue
+    seen_final_titles.add(title)
 
     # --- PREPARE DATA BASE (Shared by both) ---
     final_image_url = get_working_image_url(vid)
@@ -411,9 +435,10 @@ if new_ids_harmandir:
 print("\n================ SUMMARY ================")
 print(f"📥 Total RSS Fetched        : {total_fetched}")
 print(f"⏭️  Skipped (In Both DBs)   : {total_skipped_existing}")
+print(f"🛑 Skipped (Bad Keywords)   : {total_skipped_keywords}")
+print(f"✂️  Skipped (Shorts)        : {total_skipped_short}")
 print(f"🚫 Skipped (Live/Upc)       : {total_skipped_live}")
-print(f"🛑 Skipped (Keywords)       : {total_skipped_keywords}")
-print(f"✂️  Skipped (Short)         : {total_skipped_short}")
+print(f"👯 Skipped (Duplicate Title): {total_skipped_duplicate_titles}")
 print(f"➕ Inserted to Gurbani     : {total_inserted_gurbani} (Total: {len(existing_ids_gurbani)})")
 print(f"➕ Inserted to Harmandir   : {total_inserted_harmandir} (Total: {len(existing_ids_harmandir)})")
 print("========================================")
