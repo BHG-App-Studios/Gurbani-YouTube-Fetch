@@ -31,7 +31,7 @@ CHANNEL_IDS = [
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
 EXCLUDED_KEYWORDS = [
-    "antim ardaas", "bhog", "bhogg", "antim", "course",
+    "antim ardaas", "bhog", "bhogg", "antim", "course", "shorts", "short",
 ]
 
 # Database Configurations (Updated to target live streams)
