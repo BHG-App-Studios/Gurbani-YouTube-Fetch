@@ -27,11 +27,15 @@ CHANNEL_IDS = [
     "UC5OVS6FMiPPoUgX2YyMFjgA",
     "UCYjgDyvhHZXZ4YOw-9vUNLg",
     "UCbOzsgzfviQNcVUe5N4NjTw",
+    "UCUjIneSnBylQOqAk7n7i33A",
+    "UC1wecYlMxn33DPHrhHHUyVw",
+    "UCh0LDn5Drt44tITPoQiiJ6Q",
+    "UCBe8nwY2SqWlrGKKcmxB0_w",
 ]
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
 EXCLUDED_KEYWORDS = [
-    "antim ardaas", "bhog", "bhogg", "antim", "course", "shorts", "short",
+    "antim ardaas", "bhog", "bhogg", "antim", "course",
 ]
 
 # Database Configurations (Updated to target live streams)
