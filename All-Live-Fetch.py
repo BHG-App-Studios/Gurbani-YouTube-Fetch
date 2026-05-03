@@ -36,7 +36,7 @@ EXCLUDED_KEYWORDS = [
 
 # Database Configurations (Updated to target live streams)
 COLLECTION_NAME = "liveStreams_More"
-ALL_IDS_DOC = "-All_Live_Videos_Id"  # Changed to avoid mixing with normal video IDs
+ALL_IDS_DOC = "-All_Live_Videos_Id"  
 
 # Env variables for BOTH service accounts
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
@@ -59,12 +59,10 @@ NS = {
 # ---------------- FIREBASE DUAL INIT ----------------
 print("🔌 Initializing Firebase Connections...")
 
-# App 1: Gurbani
 cred_gurbani = credentials.Certificate(json.loads(SERVICE_ACCOUNT_GURBANI))
 app_gurbani = firebase_admin.initialize_app(cred_gurbani, name='gurbani_app')
 db_gurbani = firestore.client(app=app_gurbani)
 
-# App 2: Harmandir Sahib
 cred_harmandir = credentials.Certificate(json.loads(SERVICE_ACCOUNT_HARMANDIR))
 app_harmandir = firebase_admin.initialize_app(cred_harmandir, name='harmandir_app')
 db_harmandir = firestore.client(app=app_harmandir)
@@ -153,82 +151,6 @@ def generate_search_keywords(title):
                     keywords.add(prefix)
     return list(keywords)
 
-# ---------------- READ EXISTING IDS (2 READS) ----------------
-print(f"\n📖 Fetching existing Video IDs from {COLLECTION_NAME}...")
-
-# Read Gurbani DB
-doc_gurbani = db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
-existing_ids_gurbani = set(doc_gurbani.to_dict().get("video_id", [])) if doc_gurbani.exists else set()
-
-# Read Harmandir DB
-doc_harmandir = db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
-existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc_harmandir.exists else set()
-
-print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
-print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
-
-# ---------------- CLEANUP STALE LIVE STREAMS ----------------
-all_existing_ids = existing_ids_gurbani.union(existing_ids_harmandir)
-total_deleted_gurbani = 0
-total_deleted_harmandir = 0
-
-if all_existing_ids:
-    print(f"\n🔄 Checking {len(all_existing_ids)} previously saved live streams...")
-    # Get details for currently live streams. We only care about the keys (IDs) for cleanup.
-    still_live_ids = set(get_live_streams_details_batch(list(all_existing_ids)).keys())
-    stale_ids = all_existing_ids - still_live_ids
-
-    if stale_ids:
-        print(f"🗑️ Found {len(stale_ids)} streams no longer live. Cleaning up...")
-        
-        for vid in stale_ids:
-            target_url = f"https://www.youtube.com/watch?v={vid}"
-            
-            # Cleanup Gurbani
-            if vid in existing_ids_gurbani:
-                existing_ids_gurbani.remove(vid)
-                docs = db_gurbani.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
-                for doc in docs:
-                    doc.reference.delete()
-                total_deleted_gurbani += 1
-                
-            # Cleanup Harmandir
-            if vid in existing_ids_harmandir:
-                existing_ids_harmandir.remove(vid)
-                docs = db_harmandir.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
-                for doc in docs:
-                    doc.reference.delete()
-                total_deleted_harmandir += 1
-
-        # Update ALL_IDS_DOC arrays and counts for both apps after deletions
-        if total_deleted_gurbani > 0:
-            db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
-                "video_id": list(existing_ids_gurbani),
-                "total_count": len(existing_ids_gurbani)
-            }, merge=True)
-            print(f"✅ Updated Gurbani {ALL_IDS_DOC} (Removed {total_deleted_gurbani} stale streams)")
-
-        if total_deleted_harmandir > 0:
-            db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
-                "video_id": list(existing_ids_harmandir),
-                "total_count": len(existing_ids_harmandir)
-            }, merge=True)
-            print(f"✅ Updated Harmandir {ALL_IDS_DOC} (Removed {total_deleted_harmandir} stale streams)")
-    else:
-        print("✅ All previously saved streams are still actively live.")
-
-# ---------------- COUNTERS ----------------
-total_fetched = 0
-total_skipped_existing = 0
-total_skipped_not_live = 0
-total_skipped_keywords = 0
-total_skipped_duplicate_titles = 0
-total_inserted_gurbani = 0
-total_inserted_harmandir = 0
-new_ids_gurbani = []
-new_ids_harmandir = []
-
-# ---------------- RSS FETCH ----------------
 def fetch_videos_from_channel(channel_id):
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     try:
@@ -264,49 +186,141 @@ def fetch_videos_from_channel(channel_id):
         })
     return videos
 
-# ---------------- MAIN LOGIC ----------------
-rss_videos = []
+# ---------------- READ EXISTING IDS ----------------
+print(f"\n📖 Fetching existing Video IDs from {COLLECTION_NAME}...")
 
-# 1. Gather all videos from RSS
+doc_gurbani = db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
+existing_ids_gurbani = set(doc_gurbani.to_dict().get("video_id", [])) if doc_gurbani.exists else set()
+
+doc_harmandir = db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).get()
+existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc_harmandir.exists else set()
+
+print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
+print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
+
+# ---------------- CLEANUP STALE LIVE STREAMS ----------------
+all_existing_ids = existing_ids_gurbani.union(existing_ids_harmandir)
+total_deleted_gurbani = 0
+total_deleted_harmandir = 0
+
+if all_existing_ids:
+    print(f"\n🔄 Checking {len(all_existing_ids)} previously saved live streams...")
+    still_live_ids = set(get_live_streams_details_batch(list(all_existing_ids)).keys())
+    stale_ids = all_existing_ids - still_live_ids
+
+    if stale_ids:
+        print(f"🗑️ Found {len(stale_ids)} streams no longer live. Cleaning up...")
+        for vid in stale_ids:
+            target_url = f"https://www.youtube.com/watch?v={vid}"
+            
+            if vid in existing_ids_gurbani:
+                existing_ids_gurbani.remove(vid)
+                docs = db_gurbani.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
+                for doc in docs: doc.reference.delete()
+                total_deleted_gurbani += 1
+                
+            if vid in existing_ids_harmandir:
+                existing_ids_harmandir.remove(vid)
+                docs = db_harmandir.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
+                for doc in docs: doc.reference.delete()
+                total_deleted_harmandir += 1
+
+        if total_deleted_gurbani > 0:
+            db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
+                "video_id": list(existing_ids_gurbani), "total_count": len(existing_ids_gurbani)
+            }, merge=True)
+        if total_deleted_harmandir > 0:
+            db_harmandir.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
+                "video_id": list(existing_ids_harmandir), "total_count": len(existing_ids_harmandir)
+            }, merge=True)
+    else:
+        print("✅ All previously saved streams are still actively live.")
+
+# ---------------- COUNTERS ----------------
+total_fetched = 0
+total_skipped_no_live_word = 0
+total_skipped_existing = 0
+total_skipped_keywords = 0
+total_skipped_not_live = 0
+total_skipped_duplicate_titles = 0
+total_inserted_gurbani = 0
+total_inserted_harmandir = 0
+
+new_ids_gurbani = []
+new_ids_harmandir = []
+
+# ---------------- MAIN LOGIC PIPELINE ----------------
+
+# STEP 1: Gather all videos from RSS
 print("\n---------------- STARTING RSS FETCH ----------------")
+rss_videos = []
 for channel_id in CHANNEL_IDS:
     print(f"🔍 Fetching channel: {channel_id}")
     videos = fetch_videos_from_channel(channel_id)
     total_fetched += len(videos)
     rss_videos.extend(videos)
 
-# 2. Filter out Existing IDs 
-candidates = []
+# STEP 2: The "Live" Word Title Hack & Exclusions (NO API COST YET)
+print("\n🧹 Filtering out obvious non-live videos, existing DB videos, and bad keywords...")
+candidates_for_api = []
+seen_rss_ids = set()
+
 for v in rss_videos:
     vid = v["video_id"]
+    title = v["title"]
+
+    # Filter A: The "Live" Word Hack
+    if "live" not in title.lower():
+        total_skipped_no_live_word += 1
+        continue
+
+    # Filter B: Existing in DB Check
     if vid in existing_ids_gurbani and vid in existing_ids_harmandir:
         total_skipped_existing += 1
         continue
-    if any(c["video_id"] == vid for c in candidates):
+
+    if vid in seen_rss_ids:
         continue
-    candidates.append(v)
 
-print(f"\n📝 Candidates needing processing (missing in at least one DB): {len(candidates)}")
+    # Filter C: Excluded Bad Keywords check
+    found_keyword = False
+    for keyword in EXCLUDED_KEYWORDS:
+        pattern = r"\b" + re.escape(keyword) + r"\b"
+        if re.search(pattern, title, re.IGNORECASE):
+            found_keyword = True
+            print(f"🛑 Bad Keyword '{keyword}': {title[:40]}...")
+            break
+            
+    if found_keyword:
+        total_skipped_keywords += 1
+        continue
 
-if not candidates:
-    print("✅ No new videos to process for either database.")
+    candidates_for_api.append(v)
+    seen_rss_ids.add(vid)
+
+print(f"\n📝 Candidates surviving local filters needing API checking: {len(candidates_for_api)}")
+
+if not candidates_for_api:
+    print("✅ No new valid candidates found to check against YouTube API.")
     sys.exit(0)
 
-candidate_ids = [v["video_id"] for v in candidates]
-
-# 3. Check Live Status and Get Details (API Call)
-print("\n📡 Checking Live status & fetching details (Filtering OUT normal videos)...")
+# STEP 3: API Call (REAL Live Check)
+print("\n📡 Checking Real Live status & fetching details via YouTube API...")
+candidate_ids = [v["video_id"] for v in candidates_for_api]
 active_live_details = get_live_streams_details_batch(candidate_ids)
 
-# Keep ONLY the candidates that are currently LIVE
-live_candidates = [v for v in candidates if v["video_id"] in active_live_details]
-total_skipped_not_live = len(candidates) - len(live_candidates)
+# Keep ONLY the candidates that the API confirms are currently LIVE
+live_candidates = [v for v in candidates_for_api if v["video_id"] in active_live_details]
+total_skipped_not_live = len(candidates_for_api) - len(live_candidates)
 
 if not live_candidates:
-    print("✅ No new active live streams found right now.")
+    print("✅ No API-confirmed active live streams found right now.")
     sys.exit(0)
 
-# 3.5 Deduplicate by EXACT title match before inserting
+# STEP 4: Title Deduplication
+# Note: Because the API check just happened, EVERY video in `live_candidates` is 100% LIVE.
+# If we find 3 matching titles, keeping just the 1st one guarantees we are keeping a LIVE one!
+print("\n👯 Checking for Duplicate Titles among confirmed Live streams...")
 unique_live_candidates = []
 seen_titles = set()
 
@@ -321,37 +335,20 @@ for v in live_candidates:
 live_candidates = unique_live_candidates
 
 if not live_candidates:
-    print("✅ No unique active live streams found right now.")
+    print("✅ No unique active live streams found after deduplication.")
     sys.exit(0)
 
-# 4. Insert Final Live Streams into Respective DBs
-print("\n🚀 Starting Final Filtering & Firebase Insertion...")
-
-# Cache logos so we don't scrape the same channel multiple times per run
+# STEP 5: Firebase Push
+print("\n🚀 Starting Firebase Insertion for Final Confirmed Streams...")
 channel_logos = {}
 
 for v in live_candidates:
     vid = v["video_id"]
     title = v["title"]
     
-    # --- FILTER 1: Title Keywords ---
-    found_keyword = False
-    for keyword in EXCLUDED_KEYWORDS:
-        pattern = r"\b" + re.escape(keyword) + r"\b"
-        if re.search(pattern, title, re.IGNORECASE):
-            found_keyword = True
-            print(f"🛑 Skipped (Keyword '{keyword}'): {title[:40]}...")
-            break
-            
-    if found_keyword:
-        total_skipped_keywords += 1
-        continue
-
-    # --- PREPARE EXTENDED DATABASE DOCUMENT ---
     details = active_live_details[vid]
     channel_id = details["channelId"]
     
-    # Scrape Logo if not already cached
     if channel_id not in channel_logos:
         channel_logos[channel_id] = fetch_channel_logo(channel_id)
         
@@ -369,23 +366,22 @@ for v in live_candidates:
         "titleLowercase": v["title"].lower(),
         "url": v["url"],
         "viewCount": details["viewCount"],
-        "timestamp": str(int(time.time() * 1000)), # Keep original insertion timestamp logic
+        "timestamp": str(int(time.time() * 1000)), 
     }
 
     inserted_any = False
 
-    # Insert into Gurbani App DB (WITH searchKeywords)
+    # Insert into Gurbani App DB
     if vid not in existing_ids_gurbani:
         gurbani_doc_data = base_doc_data.copy()
         gurbani_doc_data["searchKeywords"] = generate_search_keywords(v["title"])
-        
         db_gurbani.collection(COLLECTION_NAME).document().set(gurbani_doc_data)
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
         inserted_any = True
 
-    # Insert into Harmandir Sahib App DB (WITHOUT searchKeywords)
+    # Insert into Harmandir App DB
     if vid not in existing_ids_harmandir:
         db_harmandir.collection(COLLECTION_NAME).document().set(base_doc_data)
         existing_ids_harmandir.add(vid)
@@ -416,9 +412,10 @@ if new_ids_harmandir:
 print("\n================ SUMMARY ================")
 print(f"🗑️  Stale Streams Deleted   : Gurbani: {total_deleted_gurbani} | Harmandir: {total_deleted_harmandir}")
 print(f"📥 Total RSS Fetched        : {total_fetched}")
+print(f"✂️  Skipped (No 'Live' word): {total_skipped_no_live_word}")
 print(f"⏭️  Skipped (Already in DB) : {total_skipped_existing}")
-print(f"🗑️  Skipped (Normal Videos) : {total_skipped_not_live}")
-print(f"🛑 Skipped (Keywords)       : {total_skipped_keywords}")
+print(f"🛑 Skipped (Bad Keywords)   : {total_skipped_keywords}")
+print(f"🗑️  Skipped (API: Not Live) : {total_skipped_not_live}")
 print(f"👯 Skipped (Duplicate Title): {total_skipped_duplicate_titles}")
 print(f"➕ Inserted to Gurbani     : {total_inserted_gurbani} (Total Live: {len(existing_ids_gurbani)})")
 print(f"➕ Inserted to Harmandir   : {total_inserted_harmandir} (Total Live: {len(existing_ids_harmandir)})")
