@@ -111,6 +111,15 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python Shaheed-Ganj-Sahib-Fetch.py
+        
+
+      - name: 🛕 Run Guru Nanak Gurdwara Smethwick
+        env:
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python Guru-Nanak-Gurdwara-Smethwick.py
+        
 
       - name: 🛕 Run Sis Ganj Sahib Fetch
         env:
