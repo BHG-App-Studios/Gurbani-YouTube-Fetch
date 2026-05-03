@@ -14,11 +14,24 @@ import re
 # ---------------- CONFIG ----------------
 CHANNEL_IDS = [
     "UC_JnnWTC6gHc59JwfMPTjdw",
+    "UCbRd_XngDfbGh_7G8A8O0vg",
+    "UC5Avhz91GejfLe4sRjm0vhg",
+    "UCOI-UyamQwCeKA-VVA2XwYw",
+    "UCf2HOqXWwpBbiSWTqXLWteA",
+    "UCLMfeT_BVADvx_sTybotSLA",
+    "UC884UDwNldmpdEiS1mgtijA",
+    "UCl4vnsAZHUJwk0aQsLwg1Aw",
+    "UCgoRpla8ubv-Mn7LrzL6Uzw",
+    "UCcMsjQs6pMLQWbW3ufhz1SQ",
+    "UCQroafhIKCxeQ0e9jj-O51Q",
+    "UC5OVS6FMiPPoUgX2YyMFjgA",
+    "UCYjgDyvhHZXZ4YOw-9vUNLg",
+    "UCbOzsgzfviQNcVUe5N4NjTw",
 ]
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
 EXCLUDED_KEYWORDS = [
-    "antim ardaas", "bhog", "bhogg",
+    "antim ardaas", "bhog", "bhogg", "antim", "course",
 ]
 
 # Database Configurations (Updated to target live streams)
