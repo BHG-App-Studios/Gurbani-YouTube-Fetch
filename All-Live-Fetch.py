@@ -31,11 +31,12 @@ CHANNEL_IDS = [
     "UC1wecYlMxn33DPHrhHHUyVw",
     "UCh0LDn5Drt44tITPoQiiJ6Q",
     "UCBe8nwY2SqWlrGKKcmxB0_w",
+    "UChfKn8lKy182G8m6GZ_ATDw",
 ]
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
 EXCLUDED_KEYWORDS = [
-    "antim ardaas", "bhog", "bhogg", "antim", "course",
+    "antim ardaas", "bhog", "bhogg", "antim", "course", "patna sahib", "patna",
 ]
 
 # Database Configurations (Updated to target live streams)
