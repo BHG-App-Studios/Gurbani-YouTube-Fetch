@@ -32,6 +32,7 @@ CHANNEL_IDS = [
     "UCh0LDn5Drt44tITPoQiiJ6Q",
     "UCBe8nwY2SqWlrGKKcmxB0_w",
     "UChfKn8lKy182G8m6GZ_ATDw",
+    "UCsRllxbDm0oxskk8VI4CmBA",
 ]
 
 # 🚫 Keywords to exclude (Case Insensitive, Whole Words Only)
