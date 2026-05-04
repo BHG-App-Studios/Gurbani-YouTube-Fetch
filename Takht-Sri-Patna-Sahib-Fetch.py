@@ -12,10 +12,10 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UCXhail7h5FDRbHprlR56nIw"
-TARGET_TITLE = "Takht Sri Patna Sahib"
-FETCH_LIMIT = 10             # 🔍 Number of recent uploads to check
-MIN_DURATION_SECONDS = 180   # ⏱️ 3 minutes minimum to reject YouTube Shorts
+CHANNEL_ID = "UChfKn8lKy182G8m6GZ_ATDw"
+TARGET_TITLE = "HD LIVE: Patna Sahib"
+FETCH_LIMIT = 10 
+MIN_DURATION_SECONDS = 180 
 
 # Env variables
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
