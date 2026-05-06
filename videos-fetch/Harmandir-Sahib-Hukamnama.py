@@ -12,8 +12,8 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UCD5a5KBLu4t7uZdoJQzEppg"
-TARGET_TITLE = "Today Hukamnama Sri Darbar Sahib"
+CHANNEL_ID = "UCYn6UEtQ771a_OWSiNBoG8w"
+TARGET_TITLE = "Hukamnama Sachkhand"
 TARGET_DOC_ID = "hukamnama"
 MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes minimum to reject YouTube Shorts
 FETCH_LIMIT = 5             # 🔍 Number of recent uploads to check
