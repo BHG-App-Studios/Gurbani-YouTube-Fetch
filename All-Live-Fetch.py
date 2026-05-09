@@ -372,16 +372,15 @@ for v in live_candidates:
         "titleLowercase": v["title"].lower(),
         "url": v["url"],
         "viewCount": details["viewCount"],
-        "timestamp": str(int(time.time() * 1000)), 
+        "timestamp": str(int(time.time() * 1000)),
+        "searchKeywords": generate_search_keywords(v["title"]) # <--- ADDED SEARCH KEYWORDS HERE
     }
 
     inserted_any = False
 
     # Insert into Gurbani App DB
     if vid not in existing_ids_gurbani:
-        gurbani_doc_data = base_doc_data.copy()
-        gurbani_doc_data["searchKeywords"] = generate_search_keywords(v["title"])
-        db_gurbani.collection(COLLECTION_NAME).document().set(gurbani_doc_data)
+        db_gurbani.collection(COLLECTION_NAME).document().set(base_doc_data)
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
