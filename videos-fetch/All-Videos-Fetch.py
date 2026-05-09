@@ -388,8 +388,7 @@ for v in candidates_for_api:
         "title": title,
         "titleLowercase": title.lower(),
         "url": f"https://www.youtube.com/watch?v={vid}",
-        "viewCount": details["viewCount"],
-        "searchKeywords": generate_search_keywords(title) 
+        "viewCount": details["viewCount"]
     }
 
     inserted_any = False
