@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  update-live-streams:
+  update-videos-streams:
     runs-on: ubuntu-latest
 
     steps:
