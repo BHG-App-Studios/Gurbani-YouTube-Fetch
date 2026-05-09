@@ -23,15 +23,6 @@ jobs:
           pip install requests firebase-admin beautifulsoup4
 
 
-      - name: 🛕 Run One
-        env:
-          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
-          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python more/one_time_schema_update.py
-
-        
-      
       - name: 🛕 Run Videos Updater
         env:
           FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
