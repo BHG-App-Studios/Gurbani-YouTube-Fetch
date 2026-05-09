@@ -11,7 +11,7 @@ import sys
 
 # ⚙️ Adjustable value: How many of the latest videos to update?
 # It grabs from the bottom of the array (latest added). Set to 500 as requested.
-VIDEOS_TO_UPDATE_COUNT = 500  
+VIDEOS_TO_UPDATE_COUNT = 1000  
 
 # Database Collections
 COLLECTION_GURBANI = "Listen_Kirtans_Videos_New"
