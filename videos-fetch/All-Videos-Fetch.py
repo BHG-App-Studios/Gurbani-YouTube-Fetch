@@ -261,6 +261,20 @@ def get_working_image_url(video_id):
         pass
     return fallback_url
 
+def generate_search_keywords(title):
+    if not isinstance(title, str): return []
+    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
+    keywords = set()
+    for word in words:
+        word = word.strip()
+        if len(word) > 0:
+            prefix = ""
+            for char in word:
+                prefix += char
+                if prefix.strip():
+                    keywords.add(prefix)
+    return list(keywords)
+
 # ---------------- MAIN LOGIC PIPELINE ----------------
 
 # 1. Gather all videos from RSS
@@ -374,7 +388,8 @@ for v in candidates_for_api:
         "title": title,
         "titleLowercase": title.lower(),
         "url": f"https://www.youtube.com/watch?v={vid}",
-        "viewCount": details["viewCount"]
+        "viewCount": details["viewCount"],
+        "searchKeywords": generate_search_keywords(title) 
     }
 
     inserted_any = False
