@@ -261,20 +261,6 @@ def get_working_image_url(video_id):
         pass
     return fallback_url
 
-def generate_search_keywords(title):
-    if not isinstance(title, str): return []
-    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
-    keywords = set()
-    for word in words:
-        word = word.strip()
-        if len(word) > 0:
-            prefix = ""
-            for char in word:
-                prefix += char
-                if prefix.strip():
-                    keywords.add(prefix)
-    return list(keywords)
-
 # ---------------- MAIN LOGIC PIPELINE ----------------
 
 # 1. Gather all videos from RSS
@@ -393,18 +379,15 @@ for v in candidates_for_api:
 
     inserted_any = False
 
-    # Insert into Gurbani App DB (WITH searchKeywords)
+   # Insert into Gurbani App DB
     if vid not in existing_ids_gurbani:
-        gurbani_doc_data = base_doc_data.copy()
-        gurbani_doc_data["searchKeywords"] = generate_search_keywords(title)
-        
-        db_gurbani.collection(COLLECTION_GURBANI).document().set(gurbani_doc_data)
+        db_gurbani.collection(COLLECTION_GURBANI).document().set(base_doc_data)
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
         inserted_any = True
 
-    # Insert into Harmandir Sahib App DB (WITHOUT searchKeywords)
+    # Insert into Harmandir Sahib App DB
     if vid not in existing_ids_harmandir:
         db_harmandir.collection(COLLECTION_HARMANDIR).document().set(base_doc_data)
         existing_ids_harmandir.add(vid)
