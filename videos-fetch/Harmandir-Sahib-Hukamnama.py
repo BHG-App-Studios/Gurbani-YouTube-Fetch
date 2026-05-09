@@ -103,6 +103,22 @@ def parse_iso_duration(duration_iso):
     else:
         return f"{minutes}:{seconds:02d}"
 
+
+def generate_search_keywords(title):
+    """Generates prefix keywords for search indexing."""
+    if not isinstance(title, str): return []
+    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
+    keywords = set()
+    for word in words:
+        word = word.strip()
+        if len(word) > 0:
+            prefix = ""
+            for char in word:
+                prefix += char
+                if prefix.strip():
+                    keywords.add(prefix)
+    return list(keywords)
+
 # ---------------- CORE API LOGIC (2 QUOTA UNITS TOTAL) ----------------
 def fetch_latest_api_data():
     # Convert Channel ID (UC...) to Uploads Playlist ID (UU...)
@@ -206,7 +222,8 @@ def process_and_update_firestore():
         "timestamp": current_timestamp_ms,
         "title": latest_data["title"],
         "url": new_url,
-        "viewCount": latest_data["viewCount"]
+        "viewCount": latest_data["viewCount"],
+        "searchKeywords": generate_search_keywords(latest_data["title"])
     }
 
     # ---------------- 2. CREATE/UPDATE FIREBASE DOCUMENTS ----------------
