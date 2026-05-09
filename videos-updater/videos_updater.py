@@ -71,10 +71,11 @@ def fetch_youtube_views_batch(video_ids):
             view_count = int(item["statistics"].get("viewCount", 0))
             views_map[vid] = view_count
             
+        return views_map, True # API Success
+            
     except Exception as e:
         print(f"⚠️ Error fetching video stats from YouTube: {e}")
-        
-    return views_map
+        return views_map, False # API Failed
 
 # ---------------- MAIN LOGIC ----------------
 
@@ -104,6 +105,7 @@ if not target_ids:
 # Counters
 total_updated_gurbani = 0
 total_updated_harmandir = 0
+total_deleted_videos = 0
 
 print("\n🚀 Starting YouTube API Fetch & Firestore Updates...")
 
@@ -112,22 +114,23 @@ for chunk_index, id_chunk in enumerate(chunk_list(target_ids, 50)):
     print(f"\n🔄 Processing batch {chunk_index + 1} (IDs: {len(id_chunk)})...")
     
     # 1. Get updated view counts from YouTube
-    views_map = fetch_youtube_views_batch(id_chunk)
+    views_map, api_success = fetch_youtube_views_batch(id_chunk)
     
-    # 2. Update Firebase Databases
+    if not api_success:
+        print("⚠️ Skipping this batch due to API error (protecting against accidental deletes).")
+        continue
+    
+    # 2. Update Firebase Databases (Existing Videos)
     for vid, new_view_count in views_map.items():
         target_url = f"https://www.youtube.com/watch?v={vid}"
         
         # --- Update Gurbani App DB ---
-        # Find document by matching the URL
         gurbani_docs = db_gurbani.collection(COLLECTION_GURBANI).where(filter=FieldFilter("url", "==", target_url)).stream()
         for doc in gurbani_docs:
-            # .update() only modifies the specified fields and leaves the rest untouched
             doc.reference.update({"viewCount": new_view_count})
             total_updated_gurbani += 1
             
         # --- Update Harmandir Sahib App DB ---
-        # Find document by matching the URL
         harmandir_docs = db_harmandir.collection(COLLECTION_HARMANDIR).where(filter=FieldFilter("url", "==", target_url)).stream()
         for doc in harmandir_docs:
             doc.reference.update({"viewCount": new_view_count})
@@ -135,10 +138,43 @@ for chunk_index, id_chunk in enumerate(chunk_list(target_ids, 50)):
             
         print(f"👁️ Updated {vid} -> {new_view_count} views")
 
+    # 3. Clean Up Deleted/Private Videos
+    # Any ID in our chunk that did not get returned by the API is no longer available.
+    missing_ids = set(id_chunk) - set(views_map.keys())
+    
+    for vid in missing_ids:
+        target_url = f"https://www.youtube.com/watch?v={vid}"
+        print(f"🗑️ Video {vid} is missing/private. Deleting from databases...")
+        
+        # --- Delete from Gurbani DB ---
+        gurbani_docs = db_gurbani.collection(COLLECTION_GURBANI).where(filter=FieldFilter("url", "==", target_url)).stream()
+        for doc in gurbani_docs:
+            doc.reference.delete()
+        
+        # Remove from Gurbani array index
+        db_gurbani.collection(COLLECTION_GURBANI).document(ALL_IDS_DOC).update({
+            "video_id": firestore.ArrayRemove([vid]),
+            "total_count": firestore.Increment(-1)
+        })
+
+        # --- Delete from Harmandir DB ---
+        harmandir_docs = db_harmandir.collection(COLLECTION_HARMANDIR).where(filter=FieldFilter("url", "==", target_url)).stream()
+        for doc in harmandir_docs:
+            doc.reference.delete()
+            
+        # Remove from Harmandir array index
+        db_harmandir.collection(COLLECTION_HARMANDIR).document(ALL_IDS_DOC).update({
+            "video_id": firestore.ArrayRemove([vid]),
+            "total_count": firestore.Increment(-1)
+        })
+        
+        total_deleted_videos += 1
+
 # ---------------- SUMMARY ----------------
 print("\n================ SUMMARY ================")
 print(f"🎯 Target Videos to Update : {len(target_ids)}")
 print(f"✅ Docs Updated (Gurbani)  : {total_updated_gurbani}")
 print(f"✅ Docs Updated (Harmandir): {total_updated_harmandir}")
+print(f"🗑️  Videos Deleted         : {total_deleted_videos}")
 print("========================================")
-print("🎉 View counts updated successfully!")
+print("🎉 View counts updated and cleanup finished successfully!")
