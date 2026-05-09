@@ -260,21 +260,7 @@ def get_working_image_url(video_id):
     except Exception:
         pass
     return fallback_url
-
-def generate_search_keywords(title):
-    if not isinstance(title, str): return []
-    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
-    keywords = set()
-    for word in words:
-        word = word.strip()
-        if len(word) > 0:
-            prefix = ""
-            for char in word:
-                prefix += char
-                if prefix.strip():
-                    keywords.add(prefix)
-    return list(keywords)
-
+    
 # ---------------- MAIN LOGIC PIPELINE ----------------
 
 # 1. Gather all videos from RSS
