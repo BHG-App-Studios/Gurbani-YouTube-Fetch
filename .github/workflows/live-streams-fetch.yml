@@ -48,6 +48,15 @@ jobs:
         run: python Harmandir-Sahib-Fetch.py
 
 
+
+      - name: 🚀 Run LIVE HEMKUNT SAHIB Stream Fetch
+        env:
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python Hemkunt-Sahib-Fetch.py
+
+        
       # ---------------- Historic Gurdwaras ----------------
 
       - name: 🛕 Run Bangla Sahib Fetch
