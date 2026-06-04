@@ -12,8 +12,8 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UCZPqZdR2pFs7y9MvQ9oLyiw"
-TARGET_TITLE = "Dhan Dhan Ramdas Gur 24x7"
+CHANNEL_ID = "UCStu4Pep14Ks6HW2dQeSUCA"
+TARGET_TITLE = "Mool Mantar 24x7"
 FETCH_LIMIT = 10             # 🔍 Number of recent uploads to check
 MIN_DURATION_SECONDS = 180   # ⏱️ 3 minutes minimum to reject YouTube Shorts
 
