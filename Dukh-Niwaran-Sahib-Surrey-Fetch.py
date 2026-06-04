@@ -156,15 +156,13 @@ def fetch_latest_api_data():
                 published_dt = datetime.fromisoformat(candidate["published_at"].replace("Z", "+00:00")).astimezone(timezone.utc)
                 published_time_ms = int(published_dt.timestamp() * 1000)
 
-                logo_url = fetch_channel_logo(snippet.get("channelId", CHANNEL_ID))
-
                 valid_payloads.append({
                     "imageUrl": get_working_image_url(vid_id),
                     "isLive": is_live,
                     "title": snippet.get("title", ""),
                     "url": f"https://www.youtube.com/watch?v={vid_id}",
                     "channelName": snippet.get("channelTitle", ""),
-                    "channelLogoUrl": logo_url,
+                    "channelId_temp": snippet.get("channelId", CHANNEL_ID),
                     "viewCount": view_count,
                     "timeAgo": str(published_time_ms),
                     "duration": duration_str,
@@ -178,7 +176,11 @@ def fetch_latest_api_data():
         valid_payloads.sort(key=lambda x: (x["isLive"], x["_sort_time"]), reverse=True)
 
         final_winner = valid_payloads[0]
+        
+        final_winner["channelLogoUrl"] = fetch_channel_logo(final_winner["channelId_temp"])
+        
         del final_winner["_sort_time"]
+        del final_winner["channelId_temp"]
 
         return final_winner
 
