@@ -13,7 +13,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
 CHANNEL_ID = "UCq67gxQO7e1AHN_pYAoiAwQ"
-TARGET_TITLE = "Today Hukamnama Hazur Sahib"
+TARGET_TITLE = "Hukamnama Sahib"
 TARGET_DOC_ID = "hukamnama_hazur"
 MIN_DURATION_SECONDS = 180 
 FETCH_LIMIT = 5             
