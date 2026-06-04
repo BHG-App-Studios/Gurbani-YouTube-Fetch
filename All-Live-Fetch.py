@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from bs4 import BeautifulSoup
 import json
 import os
@@ -144,20 +145,6 @@ def get_working_image_url(video_id):
         pass
     return fallback_url
 
-def generate_search_keywords(title):
-    if not isinstance(title, str): return []
-    words = re.split(r'[\s|()\[\]{}.,\'":;?!\-_]+', title.lower())
-    keywords = set()
-    for word in words:
-        word = word.strip()
-        if len(word) > 0:
-            prefix = ""
-            for char in word:
-                prefix += char
-                if prefix.strip():
-                    keywords.add(prefix)
-    return list(keywords)
-
 def fetch_videos_from_channel(channel_id):
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     try:
@@ -222,13 +209,13 @@ if all_existing_ids:
             
             if vid in existing_ids_gurbani:
                 existing_ids_gurbani.remove(vid)
-                docs = db_gurbani.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
+                docs = db_gurbani.collection(COLLECTION_NAME).where(filter=FieldFilter("url", "==", target_url)).stream()
                 for doc in docs: doc.reference.delete()
                 total_deleted_gurbani += 1
                 
             if vid in existing_ids_harmandir:
                 existing_ids_harmandir.remove(vid)
-                docs = db_harmandir.collection(COLLECTION_NAME).where(filter=firestore.FieldFilter("url", "==", target_url)).stream()
+                docs = db_harmandir.collection(COLLECTION_NAME).where(filter=FieldFilter("url", "==", target_url)).stream()
                 for doc in docs: doc.reference.delete()
                 total_deleted_harmandir += 1
 
@@ -380,9 +367,7 @@ for v in live_candidates:
 
     # Insert into Gurbani App DB
     if vid not in existing_ids_gurbani:
-        gurbani_doc_data = base_doc_data.copy()
-        gurbani_doc_data["searchKeywords"] = generate_search_keywords(v["title"])
-        db_gurbani.collection(COLLECTION_NAME).document().set(gurbani_doc_data)
+        db_gurbani.collection(COLLECTION_NAME).document().set(base_doc_data)
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
