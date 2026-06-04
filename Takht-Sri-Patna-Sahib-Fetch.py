@@ -12,9 +12,9 @@ from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 # ---------------- CONFIG ----------------
-CHANNEL_ID = "UChfKn8lKy182G8m6GZ_ATDw"
-TARGET_TITLE = "HD LIVE: Patna Sahib"
-FETCH_LIMIT = 10 
+CHANNEL_ID = "UCXhail7h5FDRbHprlR56nIw"
+TARGET_TITLE = "Takht Sri Patna Sahib"
+FETCH_LIMIT = 20 
 MIN_DURATION_SECONDS = 180 
 
 # Env variables
