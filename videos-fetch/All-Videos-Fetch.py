@@ -379,9 +379,19 @@ for v in candidates_for_api:
 
     inserted_any = False
 
-   # Insert into Gurbani App DB
+    # Insert into Gurbani App DB
     if vid not in existing_ids_gurbani:
-        db_gurbani.collection(COLLECTION_GURBANI).document().set(base_doc_data)
+        # 1. Create a reference to get the auto-generated Document ID
+        doc_ref_gurbani = db_gurbani.collection(COLLECTION_GURBANI).document()
+        
+        # 2. Set the data into the video collection
+        doc_ref_gurbani.set(base_doc_data)
+        
+        # 3. Safely update Search_Collection -> streams with the new ID and lowercase title
+        db_gurbani.collection("Search_Collection").document("streams").set({
+            doc_ref_gurbani.id: base_doc_data["titleLowercase"]
+        }, merge=True)
+
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
@@ -389,7 +399,17 @@ for v in candidates_for_api:
 
     # Insert into Harmandir Sahib App DB
     if vid not in existing_ids_harmandir:
-        db_harmandir.collection(COLLECTION_HARMANDIR).document().set(base_doc_data)
+        # 1. Create a reference to get the auto-generated Document ID
+        doc_ref_harmandir = db_harmandir.collection(COLLECTION_HARMANDIR).document()
+        
+        # 2. Set the data into the video collection
+        doc_ref_harmandir.set(base_doc_data)
+        
+        # 3. Safely update Search_Collection -> streams with the new ID and lowercase title
+        db_harmandir.collection("Search_Collection").document("streams").set({
+            doc_ref_harmandir.id: base_doc_data["titleLowercase"]
+        }, merge=True)
+
         existing_ids_harmandir.add(vid)
         new_ids_harmandir.append(vid)
         total_inserted_harmandir += 1
