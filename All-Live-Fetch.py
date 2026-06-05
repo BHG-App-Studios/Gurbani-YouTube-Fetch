@@ -207,18 +207,33 @@ if all_existing_ids:
         for vid in stale_ids:
             target_url = f"https://www.youtube.com/watch?v={vid}"
             
+            # Gurbani Cleanup
             if vid in existing_ids_gurbani:
                 existing_ids_gurbani.remove(vid)
                 docs = db_gurbani.collection(COLLECTION_NAME).where(filter=FieldFilter("url", "==", target_url)).stream()
-                for doc in docs: doc.reference.delete()
+                for doc in docs: 
+                    doc_id = doc.id
+                    doc.reference.delete()
+                    # Remove from Search_Collection
+                    db_gurbani.collection("Search_Collection").document("streams").set({
+                        doc_id: firestore.DELETE_FIELD
+                    }, merge=True)
                 total_deleted_gurbani += 1
                 
+            # Harmandir Cleanup
             if vid in existing_ids_harmandir:
                 existing_ids_harmandir.remove(vid)
                 docs = db_harmandir.collection(COLLECTION_NAME).where(filter=FieldFilter("url", "==", target_url)).stream()
-                for doc in docs: doc.reference.delete()
+                for doc in docs: 
+                    doc_id = doc.id
+                    doc.reference.delete()
+                    # Remove from Search_Collection
+                    db_harmandir.collection("Search_Collection").document("streams").set({
+                        doc_id: firestore.DELETE_FIELD
+                    }, merge=True)
                 total_deleted_harmandir += 1
 
+        # Update ALL_IDS_DOC indexes
         if total_deleted_gurbani > 0:
             db_gurbani.collection(COLLECTION_NAME).document(ALL_IDS_DOC).set({
                 "video_id": list(existing_ids_gurbani), "total_count": len(existing_ids_gurbani)
@@ -312,8 +327,6 @@ if not live_candidates:
     sys.exit(0)
 
 # STEP 4: Title Deduplication
-# Note: Because the API check just happened, EVERY video in `live_candidates` is 100% LIVE.
-# If we find 3 matching titles, keeping just the 1st one guarantees we are keeping a LIVE one!
 print("\n👯 Checking for Duplicate Titles among confirmed Live streams...")
 unique_live_candidates = []
 seen_titles = set()
@@ -367,7 +380,14 @@ for v in live_candidates:
 
     # Insert into Gurbani App DB
     if vid not in existing_ids_gurbani:
-        db_gurbani.collection(COLLECTION_NAME).document().set(base_doc_data)
+        doc_ref_gurbani = db_gurbani.collection(COLLECTION_NAME).document()
+        doc_ref_gurbani.set(base_doc_data)
+        
+        # Safely save to Search_Collection
+        db_gurbani.collection("Search_Collection").document("streams").set({
+            doc_ref_gurbani.id: base_doc_data["titleLowercase"]
+        }, merge=True)
+        
         existing_ids_gurbani.add(vid)
         new_ids_gurbani.append(vid)
         total_inserted_gurbani += 1
@@ -375,7 +395,14 @@ for v in live_candidates:
 
     # Insert into Harmandir App DB
     if vid not in existing_ids_harmandir:
-        db_harmandir.collection(COLLECTION_NAME).document().set(base_doc_data)
+        doc_ref_harmandir = db_harmandir.collection(COLLECTION_NAME).document()
+        doc_ref_harmandir.set(base_doc_data)
+        
+        # Safely save to Search_Collection
+        db_harmandir.collection("Search_Collection").document("streams").set({
+            doc_ref_harmandir.id: base_doc_data["titleLowercase"]
+        }, merge=True)
+        
         existing_ids_harmandir.add(vid)
         new_ids_harmandir.append(vid)
         total_inserted_harmandir += 1
