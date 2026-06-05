@@ -10,7 +10,7 @@ import sys
 # ---------------- CONFIGURATION ----------------
 
 # ⚙️ Adjustable value: How many of the latest videos to update?
-# It grabs from the bottom of the array (latest added). Set to 500 as requested.
+# It grabs from the bottom of the array (latest added). Set to 1000 as requested.
 VIDEOS_TO_UPDATE_COUNT = 1000  
 
 # Database Collections
@@ -144,12 +144,17 @@ for chunk_index, id_chunk in enumerate(chunk_list(target_ids, 50)):
     
     for vid in missing_ids:
         target_url = f"https://www.youtube.com/watch?v={vid}"
-        print(f"🗑️ Video {vid} is missing/private. Deleting from databases...")
+        print(f"🗑️ Video {vid} is missing/private. Deleting from databases and Search Collection...")
         
-        # --- Delete from Gurbani DB ---
+        # --- Delete from Gurbani DB & Search Collection ---
         gurbani_docs = db_gurbani.collection(COLLECTION_GURBANI).where(filter=FieldFilter("url", "==", target_url)).stream()
         for doc in gurbani_docs:
+            doc_id = doc.id
             doc.reference.delete()
+            # Safely remove from Search_Collection
+            db_gurbani.collection("Search_Collection").document("streams").set({
+                doc_id: firestore.DELETE_FIELD
+            }, merge=True)
         
         # Remove from Gurbani array index
         db_gurbani.collection(COLLECTION_GURBANI).document(ALL_IDS_DOC).update({
@@ -157,10 +162,15 @@ for chunk_index, id_chunk in enumerate(chunk_list(target_ids, 50)):
             "total_count": firestore.Increment(-1)
         })
 
-        # --- Delete from Harmandir DB ---
+        # --- Delete from Harmandir DB & Search Collection ---
         harmandir_docs = db_harmandir.collection(COLLECTION_HARMANDIR).where(filter=FieldFilter("url", "==", target_url)).stream()
         for doc in harmandir_docs:
+            doc_id = doc.id
             doc.reference.delete()
+            # Safely remove from Search_Collection
+            db_harmandir.collection("Search_Collection").document("streams").set({
+                doc_id: firestore.DELETE_FIELD
+            }, merge=True)
             
         # Remove from Harmandir array index
         db_harmandir.collection(COLLECTION_HARMANDIR).document(ALL_IDS_DOC).update({

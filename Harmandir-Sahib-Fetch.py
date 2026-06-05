@@ -11,6 +11,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+# ---------------- CONFIG ----------------
 CHANNEL_ID = "UCYn6UEtQ771a_OWSiNBoG8w"
 TARGET_TITLE_PRIMARY = "Official SGPC LIVE"
 TARGET_TITLE_SECONDARY = "Official SGPC LIVE (Audio)"
@@ -216,9 +217,20 @@ def update_firestore_dual(payload):
             return
 
         doc = docs[0]
+        doc_id = doc.id
         
+        # 1. Update the main video document
         doc.reference.update(data)
-        print(f"✅ {app_name} updated successfully with full data!")
+        
+        # 2. Safely update Search_Collection -> streams
+        search_title = data.get("titleLowercase", data.get("title", "").lower())
+        try:
+            db_client.collection("Search_Collection").document("streams").set({
+                doc_id: search_title
+            }, merge=True)
+            print(f"✅ {app_name} updated successfully with full data and Search Index! (ID: {doc_id})")
+        except Exception as e:
+            print(f"❌ Failed to update Search Index in {app_name}: {e}")
 
     do_update(db_gurbani, COLLECTION_GURBANI, "Gurbani App", payload)
     do_update(db_harmandir, COLLECTION_HARMANDIR, "Harmandir App", harmandir_payload)
