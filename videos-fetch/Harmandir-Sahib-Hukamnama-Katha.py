@@ -16,7 +16,7 @@ CHANNEL_ID = "UCYn6UEtQ771a_OWSiNBoG8w"
 TARGET_TITLE = "Hukamnama Katha"
 TARGET_DOC_ID = "hukamnama_katha"
 MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes minimum to reject YouTube Shorts
-FETCH_LIMIT = 5             # 🔍 Number of recent uploads to check
+FETCH_LIMIT = 40             # 🔍 Number of recent uploads to check
 
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
@@ -205,16 +205,23 @@ def process_and_update_firestore():
         "timeAgo": time_ago_ms,
         "timestamp": current_timestamp_ms,
         "title": latest_data["title"],
+        "titleLowercase": latest_data["title"].lower(), # Added for Search Collection
         "url": new_url,
         "viewCount": latest_data["viewCount"]
     }
 
     # ---------------- 2. CREATE/UPDATE FIREBASE DOCUMENTS ----------------
-    def safe_create_or_update(collection_ref, payload, app_name, custom_doc_id):
+    def safe_create_or_update(db_client, collection_name, payload, app_name, custom_doc_id):
         try:
-            # .set() smartly overwrites an existing document with this ID, or creates a new one if it doesn't exist
-            collection_ref.document(custom_doc_id).set(payload)
-            print(f"✅ Document successfully updated/created in {app_name}! (ID: {custom_doc_id})")
+            # 1. Update main video collection
+            db_client.collection(collection_name).document(custom_doc_id).set(payload)
+            
+            # 2. Safely update Search_Collection -> streams with the new ID and lowercase title
+            db_client.collection("Search_Collection").document("streams").set({
+                custom_doc_id: payload["titleLowercase"]
+            }, merge=True)
+            
+            print(f"✅ Document and Search Index successfully updated in {app_name}! (ID: {custom_doc_id})")
         except Exception as e:
             print(f"❌ Failed to process document in {app_name}: {e}")
 
@@ -222,12 +229,10 @@ def process_and_update_firestore():
     print(f"\n📝 Processing documents with specific ID: {document_id} ...")
     
     # Create/Update document in Gurbani App 
-    safe_create_or_update(db_gurbani.collection(COLLECTION_GURBANI), base_payload, "Gurbani App", document_id)
+    safe_create_or_update(db_gurbani, COLLECTION_GURBANI, base_payload, "Gurbani App", document_id)
 
     # Create/Update document in Harmandir App
-    harmandir_payload = base_payload.copy()
-    harmandir_payload["titleLowercase"] = base_payload["title"].lower()
-    safe_create_or_update(db_harmandir.collection(COLLECTION_HARMANDIR), harmandir_payload, "Harmandir App", document_id)
+    safe_create_or_update(db_harmandir, COLLECTION_HARMANDIR, base_payload, "Harmandir App", document_id)
 
 if __name__ == "__main__":
     process_and_update_firestore()
