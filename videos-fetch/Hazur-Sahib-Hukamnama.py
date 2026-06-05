@@ -16,7 +16,7 @@ CHANNEL_ID = "UCq67gxQO7e1AHN_pYAoiAwQ"
 TARGET_TITLE = "Hukamnama Sahib"
 TARGET_DOC_ID = "hukamnama_hazur"
 MIN_DURATION_SECONDS = 180  # ⏱️ 3 minutes minimum to reject YouTube Shorts
-FETCH_LIMIT = 40            # 🔍 Number of recent uploads to check
+FETCH_LIMIT = 40             # 🔍 Number of recent uploads to check
 
 SERVICE_ACCOUNT_GURBANI = os.environ.get("FIREBASE_SERVICE_ACCOUNT_GURBANI")
 SERVICE_ACCOUNT_HARMANDIR = os.environ.get("FIREBASE_SERVICE_ACCOUNT_HARMANDIR")
@@ -213,17 +213,33 @@ def process_and_update_firestore():
     # ---------------- 2. CREATE/UPDATE FIREBASE DOCUMENTS ----------------
     def safe_create_or_update(db_client, collection_name, payload, app_name, custom_doc_id):
         try:
+            doc_ref = db_client.collection(collection_name).document(custom_doc_id)
+            doc_snapshot = doc_ref.get()
+            
+            # Create a copy of the payload so we don't modify the global base_payload
+            app_specific_payload = payload.copy()
+            
+            # Check if document already exists
+            if doc_snapshot.exists:
+                existing_data = doc_snapshot.to_dict() or {}
+                # If it has an existing timestamp, preserve it!
+                if "timestamp" in existing_data:
+                    app_specific_payload["timestamp"] = existing_data["timestamp"]
+                    print(f"   ℹ️ [{app_name}] Document exists. Preserving original timestamp.")
+            else:
+                print(f"   🆕 [{app_name}] New document created. Using new timestamp.")
+
             # 1. Update main video collection
-            db_client.collection(collection_name).document(custom_doc_id).set(payload)
+            doc_ref.set(app_specific_payload)
             
             # 2. Safely update Search_Collection -> streams with the new ID and lowercase title
             db_client.collection("Search_Collection").document("streams").set({
-                custom_doc_id: payload["titleLowercase"]
+                custom_doc_id: app_specific_payload["titleLowercase"]
             }, merge=True)
             
-            print(f"✅ Document and Search Index successfully updated in {app_name}! (ID: {custom_doc_id})")
+            print(f"   ✅ Document and Search Index successfully updated in {app_name}! (ID: {custom_doc_id})")
         except Exception as e:
-            print(f"❌ Failed to process document in {app_name}: {e}")
+            print(f"   ❌ Failed to process document in {app_name}: {e}")
 
     document_id = f"{TARGET_DOC_ID}-{video_id}"
     print(f"\n📝 Processing documents with specific ID: {document_id} ...")
