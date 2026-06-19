@@ -6,6 +6,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import json
 import os
 import sys
+import random
 
 # ---------------- CONFIGURATION ----------------
 
@@ -179,6 +180,30 @@ for chunk_index, id_chunk in enumerate(chunk_list(target_ids, 50)):
         })
         
         total_deleted_videos += 1
+
+
+# ---------------- UPDATE APP-SETUP TRIGGERS ----------------
+print("\n🔄 Updating nitnem_fetch_trigger in App-Setup...")
+random_trigger_gurbani = random.randint(100000000, 999999999)
+random_trigger_harmandir = random.randint(100000000, 999999999)
+
+try:
+    db_gurbani.collection("App-Setup").document("App-Setup").set({
+        "nitnem_fetch_trigger": random_trigger_gurbani
+    }, merge=True)
+    print(f"   ✅ Gurbani App-Setup updated (Trigger: {random_trigger_gurbani})")
+except Exception as e:
+    print(f"   ❌ Failed to update Gurbani App-Setup: {e}")
+
+try:
+    db_harmandir.collection("App-Setup").document("App-Setup").set({
+        "nitnem_fetch_trigger": random_trigger_harmandir
+    }, merge=True)
+    print(f"   ✅ Harmandir App-Setup updated (Trigger: {random_trigger_harmandir})")
+except Exception as e:
+    print(f"   ❌ Failed to update Harmandir App-Setup: {e}")
+
+
 
 # ---------------- SUMMARY ----------------
 print("\n================ SUMMARY ================")
