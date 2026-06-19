@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import re
+import random
 
 # ---------------- CONFIG ----------------
 CHANNEL_IDS = [
@@ -419,7 +420,7 @@ for v in candidates_for_api:
         print(f"➕ Inserted ({details['duration_formatted']}): {vid} - {title[:30]}...")
         time.sleep(0.03)
 
-# ---------------- UPDATE ID INDEXES ----------------
+# ---------------- UPDATE ID INDEXES & APP-SETUP ----------------
 if new_ids_gurbani:
     print(f"\n💾 Updating {ALL_IDS_DOC} index for Gurbani App...")
     db_gurbani.collection(COLLECTION_GURBANI).document(ALL_IDS_DOC).set({
@@ -427,12 +428,32 @@ if new_ids_gurbani:
         "total_count": len(existing_ids_gurbani)
     }, merge=True)
 
+    # --- NEW CODE: Update nitnem_fetch_trigger safely ---
+    random_trigger_gurbani = random.randint(100000000, 999999999) # Generates random 9-digit number
+    print(f"🔄 Updating nitnem_fetch_trigger in Gurbani App-Setup to: {random_trigger_gurbani}")
+    
+    # merge=True is CRITICAL here. It ensures you don't overwrite the 'evening', 'night', and 'post' fields
+    db_gurbani.collection("App-Setup").document("App-Setup").set({
+        "nitnem_fetch_trigger": random_trigger_gurbani
+    }, merge=True)
+    # ----------------------------------------------------
+
 if new_ids_harmandir:
     print(f"💾 Updating {ALL_IDS_DOC} index for Harmandir App...")
     db_harmandir.collection(COLLECTION_HARMANDIR).document(ALL_IDS_DOC).set({
         "video_id": list(existing_ids_harmandir),
         "total_count": len(existing_ids_harmandir)
     }, merge=True)
+
+    # --- NEW CODE: Update nitnem_fetch_trigger safely (If Harmandir DB also needs it) ---
+    random_trigger_harmandir = random.randint(100000000, 999999999)
+    print(f"🔄 Updating nitnem_fetch_trigger in Harmandir App-Setup to: {random_trigger_harmandir}")
+    
+    db_harmandir.collection("App-Setup").document("App-Setup").set({
+        "nitnem_fetch_trigger": random_trigger_harmandir
+    }, merge=True)
+    # ----------------------------------------------------
+
 
 # ---------------- SUMMARY ----------------
 print("\n================ SUMMARY ================")
