@@ -252,7 +252,7 @@ def process_and_update_firestore():
     safe_create_or_update(db_harmandir, COLLECTION_HARMANDIR, base_payload, "Harmandir App", document_id)
 
     # ---------------- 3. UPDATE APP-SETUP TRIGGERS (NEWLY ADDED) ----------------
-    print("\n🔄 Updating nitnem_fetch_trigger in App-Setup...")
+    print("\n🔄 Updating kirtan_videos_fetch in App-Setup...")
     
     random_trigger_gurbani = random.randint(100000000, 999999999)
     random_trigger_harmandir = random.randint(100000000, 999999999)
@@ -260,7 +260,7 @@ def process_and_update_firestore():
     try:
         # Gurbani App Update
         db_gurbani.collection("App-Setup").document("App-Setup").set({
-            "nitnem_fetch_trigger": random_trigger_gurbani
+            "kirtan_videos_fetch": random_trigger_gurbani
         }, merge=True)
         print(f"   ✅ Gurbani App-Setup updated (Trigger: {random_trigger_gurbani})")
     except Exception as e:
@@ -269,7 +269,7 @@ def process_and_update_firestore():
     try:
         # Harmandir App Update
         db_harmandir.collection("App-Setup").document("App-Setup").set({
-            "nitnem_fetch_trigger": random_trigger_harmandir
+            "kirtan_videos_fetch": random_trigger_harmandir
         }, merge=True)
         print(f"   ✅ Harmandir App-Setup updated (Trigger: {random_trigger_harmandir})")
     except Exception as e:
