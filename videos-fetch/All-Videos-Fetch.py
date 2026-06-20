@@ -428,13 +428,13 @@ if new_ids_gurbani:
         "total_count": len(existing_ids_gurbani)
     }, merge=True)
 
-    # --- NEW CODE: Update nitnem_fetch_trigger safely ---
+    # --- NEW CODE: Update kirtan_videos_fetch safely ---
     random_trigger_gurbani = random.randint(100000000, 999999999) # Generates random 9-digit number
-    print(f"🔄 Updating nitnem_fetch_trigger in Gurbani App-Setup to: {random_trigger_gurbani}")
+    print(f"🔄 Updating kirtan_videos_fetch in Gurbani App-Setup to: {random_trigger_gurbani}")
     
     # merge=True is CRITICAL here. It ensures you don't overwrite the 'evening', 'night', and 'post' fields
     db_gurbani.collection("App-Setup").document("App-Setup").set({
-        "nitnem_fetch_trigger": random_trigger_gurbani
+        "kirtan_videos_fetch": random_trigger_gurbani
     }, merge=True)
     # ----------------------------------------------------
 
@@ -445,12 +445,12 @@ if new_ids_harmandir:
         "total_count": len(existing_ids_harmandir)
     }, merge=True)
 
-    # --- NEW CODE: Update nitnem_fetch_trigger safely (If Harmandir DB also needs it) ---
+    # --- NEW CODE: Update kirtan_videos_fetch safely (If Harmandir DB also needs it) ---
     random_trigger_harmandir = random.randint(100000000, 999999999)
-    print(f"🔄 Updating nitnem_fetch_trigger in Harmandir App-Setup to: {random_trigger_harmandir}")
+    print(f"🔄 Updating kirtan_videos_fetch in Harmandir App-Setup to: {random_trigger_harmandir}")
     
     db_harmandir.collection("App-Setup").document("App-Setup").set({
-        "nitnem_fetch_trigger": random_trigger_harmandir
+        "kirtan_videos_fetch": random_trigger_harmandir
     }, merge=True)
     # ----------------------------------------------------
 
