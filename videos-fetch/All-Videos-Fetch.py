@@ -90,11 +90,13 @@ print("\n📖 Fetching existing Video IDs from both databases...")
 
 # Read Gurbani DB
 doc_gurbani = db_gurbani.collection(COLLECTION_GURBANI).document(ALL_IDS_DOC).get()
-existing_ids_gurbani = set(doc_gurbani.to_dict().get("video_id", [])) if doc_gurbani.exists else set()
+raw_ids_gurbani = doc_gurbani.to_dict().get("video_id", []) if doc_gurbani.exists else []
+existing_ids_gurbani = set(raw_ids_gurbani) if isinstance(raw_ids_gurbani, (list, tuple, set)) else set()
 
 # Read Harmandir DB
 doc_harmandir = db_harmandir.collection(COLLECTION_HARMANDIR).document(ALL_IDS_DOC).get()
-existing_ids_harmandir = set(doc_harmandir.to_dict().get("video_id", [])) if doc_harmandir.exists else set()
+raw_ids_harmandir = doc_harmandir.to_dict().get("video_id", []) if doc_harmandir.exists else []
+existing_ids_harmandir = set(raw_ids_harmandir) if isinstance(raw_ids_harmandir, (list, tuple, set)) else set()
 
 print(f"📦 Existing in Gurbani App: {len(existing_ids_gurbani)}")
 print(f"📦 Existing in Harmandir App: {len(existing_ids_harmandir)}")
@@ -124,7 +126,11 @@ def fetch_videos_from_channel(channel_id):
         print(f"⚠️ Error fetching channel {channel_id}: {e}")
         return []
 
-    root = ET.fromstring(response.text)
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError as e:
+        print(f"⚠️ Invalid RSS XML for channel {channel_id}: {e}")
+        return []
     videos = []
     entries = root.findall("atom:entry", NS)
     
@@ -136,9 +142,13 @@ def fetch_videos_from_channel(channel_id):
         if title_el is None or video_id_el is None or published_el is None:
             continue
 
-        published_dt = datetime.fromisoformat(
-            published_el.text.replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
+        try:
+            published_dt = datetime.fromisoformat(
+                published_el.text.replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+        except (TypeError, ValueError) as e:
+            print(f"⚠️ Invalid published timestamp for {video_id_el.text!r}: {e}")
+            continue
 
         video_id = video_id_el.text.strip()
 
@@ -195,6 +205,8 @@ def fetch_video_details_batch(video_ids):
             r = requests.get(url, params=params, timeout=15)
             r.raise_for_status()
             data = r.json()
+            if not isinstance(data, dict) or "items" not in data:
+                raise ValueError("YouTube API returned an invalid payload")
             for item in data.get("items", []):
                 vid = item["id"]
                 
@@ -225,6 +237,7 @@ def fetch_video_details_batch(video_ids):
                 }
         except Exception as e:
             print(f"⚠️ Error fetching video details: {e}")
+            return None
     return details_map
 
 def fetch_channel_logo(channel_id):
@@ -322,6 +335,10 @@ if not candidates_for_api:
 print("\n⏱️ Fetching Full Video Details & Live Status (via YouTube API)...")
 candidate_ids = [v["video_id"] for v in candidates_for_api]
 details_map = fetch_video_details_batch(candidate_ids)
+
+if details_map is None:
+    print("❌ YouTube API unavailable; no database changes will be made.")
+    sys.exit(1)
 
 # 4. Final Filters & Firebase Insertion
 print("\n🚀 Starting Final API Filtering & Firebase Insertion...")

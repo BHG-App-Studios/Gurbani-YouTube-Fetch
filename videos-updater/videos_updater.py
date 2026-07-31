@@ -65,6 +65,8 @@ def fetch_youtube_views_batch(video_ids):
         r = requests.get(url, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
+        if not isinstance(data, dict) or "items" not in data:
+            raise ValueError("YouTube API returned an invalid payload")
         
         for item in data.get("items", []):
             vid = item["id"]
@@ -89,6 +91,9 @@ if not doc_harmandir.exists:
     sys.exit(1)
 
 all_video_ids = doc_harmandir.to_dict().get("video_id", [])
+if not isinstance(all_video_ids, list):
+    print(f"❌ Invalid video_id index in {COLLECTION_HARMANDIR}/{ALL_IDS_DOC}; refusing updates/deletions.")
+    sys.exit(1)
 total_ids_available = len(all_video_ids)
 
 print(f"📦 Total IDs found in database: {total_ids_available}")
