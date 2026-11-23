@@ -1,0 +1,78 @@
+name: Add Single YouTube Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: "YouTube Video URL or Video ID (e.g. https://www.youtube.com/watch?v=... or ID)"
+        required: true
+        type: string
+      collection:
+        description: "Firestore Collection to add video to"
+        required: true
+        type: choice
+        default: "Listen_Kirtans_Videos_New"
+        options:
+          - "Listen_Kirtans_Videos_New"
+          - "liveStreams"
+          - "liveStreams_More"
+          - "Hukamnama-Sahib-Video"
+          - "Palki-Sahib-Video"
+          - "Past_Hukamnams"
+          - "Custom Collection"
+      custom_collection:
+        description: "Custom Collection Name (Only if 'Custom Collection' selected above)"
+        required: false
+        type: string
+        default: ""
+      is_live:
+        description: "isLive status (auto = liveStreams/active live are true, others false)"
+        required: true
+        type: choice
+        default: "auto"
+        options:
+          - "auto"
+          - "true"
+          - "false"
+      target_database:
+        description: "Target Database(s) to update"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "gurbani"
+          - "harmandir"
+          - "hukamnama"
+
+jobs:
+  add-single-video:
+    runs-on: ubuntu-latest
+    name: Add Video to Firestore
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests firebase-admin google-cloud-firestore beautifulsoup4
+
+      - name: 🚀 Run Add Single Video Script
+        env:
+          FIREBASE_SERVICE_ACCOUNT_GURBANI: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GURBANI }}
+          FIREBASE_SERVICE_ACCOUNT_HARMANDIR: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HARMANDIR }}
+          FIREBASE_SERVICE_ACCOUNT_HUKAMNAMA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_HUKAMNAMA }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          INPUT_VIDEO_URL: ${{ inputs.video_url }}
+          INPUT_COLLECTION: ${{ inputs.collection }}
+          INPUT_CUSTOM_COLLECTION: ${{ inputs.custom_collection }}
+          INPUT_IS_LIVE: ${{ inputs.is_live }}
+          INPUT_TARGET_DB: ${{ inputs.target_database }}
+        run: python Add-Single-Video.py
